@@ -6,21 +6,21 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="data:,">
 <title>Glance</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
 <style>
   /* Layout: one column — where (whole-repo minimap) above how (affected paths down to functions + calls), same chips in both */
   :root {
-    --bg: #f6f7f9; --surface: #ffffff; --fg: #1d232b; --muted: #6b7480; --faint: #a7aeb8;
-    --line: #dde1e7; --chip: #f1f3f6; --risk: #b45309; --risk-bg: #fdf3e4;
-    --stray: #5b5fc7; --stray-bg: #eeeffc; --new: #15803d; --accent: #2b6cb0;
-    --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --bg: #ffffff; --surface: #ffffff; --fg: #171717; --muted: #666666; --faint: #a8a8a8;
+    --line: #ebebeb; --chip: #f7f7f7; --risk: #a35200; --risk-bg: #fff4e5;
+    --stray: #7c3aed; --stray-bg: #f3ecff; --new: #16a34a; --accent: #171717;
+    --sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) { :root {
-    --bg: #14171c; --surface: #1b1f26; --fg: #e3e7ed; --muted: #97a0ad; --faint: #5a626e;
-    --line: #2c323c; --chip: #232830; --risk: #f0a64a; --risk-bg: #2e2416;
-    --stray: #a3a6f5; --stray-bg: #24253d; --new: #4ade80; --accent: #79b0ef; color-scheme: dark } }
+    --bg: #000000; --surface: #0a0a0a; --fg: #ededed; --muted: #a1a1a1; --faint: #575757;
+    --line: #262626; --chip: #111111; --risk: #f5a524; --risk-bg: #261a06;
+    --stray: #bf7af0; --stray-bg: #1d1029; --new: #45d483; --accent: #ededed; color-scheme: dark } }
 
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--sans);
@@ -29,11 +29,11 @@
     padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   [hidden] { display: none !important; }
   .wrap { max-width: 860px; margin: 0 auto; display: grid; gap: 16px; }
-  h1 { font-size: 22px; line-height: 1.25; margin: 0; text-wrap: balance; }
+  h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; margin: 0; text-wrap: balance; }
   .branch { font: 13px var(--mono); color: var(--muted); }
-  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
     padding: 20px 24px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; min-width: 0; }
-  .label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .label { font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: 10px; }
   .message { color: var(--muted); }
 
   /* Shared chips */

@@ -2,6 +2,7 @@
 import { parseArgs } from "node:util";
 import { analyze } from "../src/analyze.js";
 import { publishSettings, saveId, savedId } from "../src/config.js";
+import { linkOnPullRequest } from "../src/pr.js";
 import { openInBrowser, serveLocally } from "../src/serve.js";
 
 const HELP = `glance: map a branch's changes for review
@@ -15,18 +16,25 @@ Options
   --base <ref>     Branch to compare against (default: origin's default branch, then main/master)
   --head <ref>     Commit or branch to review (default: HEAD)
   --title <text>   Title shown on the page (default: first commit message on the branch)
+  --pr [number]    With publish: put the link in the pull request's description
+                   (default: the pull request for this branch). Uses the gh CLI.
   --port <n>       Port for the local page (default: any free port)
   --no-open        Start the local page without opening a browser
   -h, --help       Show this help
 
 Publishing reads GLANCE_PUBLISH_KEY and GLANCE_URL, or ~/.config/glance/config.json.`;
 
+// "--pr" may stand alone (this branch's pull request) or take a number.
+const args = process.argv.slice(2).map((arg, i, all) => (arg === "--pr" && !/^\d+$/.test(all[i + 1] || "") ? "--pr=current" : arg));
+
 const { values, positionals } = parseArgs({
+  args,
   allowPositionals: true,
   options: {
     base: { type: "string" },
     head: { type: "string", default: "HEAD" },
     title: { type: "string" },
+    pr: { type: "string" },
     port: { type: "string", default: "0" },
     "no-open": { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
@@ -39,6 +47,7 @@ async function main() {
     console.log(HELP);
     process.exit(values.help ? 0 : 1);
   }
+  if (values.pr && command !== "publish") throw new Error("--pr only works with glance publish.");
 
   const { brief, stats, root } = analyze({ cwd: process.cwd(), base: values.base, head: values.head, title: values.title });
 
@@ -62,6 +71,10 @@ async function main() {
     if (!res.ok) throw new Error(`Publish failed (${res.status}): ${body.error || "no details"}`);
     saveId(root, brief.head, body.id);
     console.log(body.url);
+    if (values.pr) {
+      const prUrl = linkOnPullRequest(root, values.pr === "current" ? null : values.pr, body.url);
+      console.error(`Linked on ${prUrl}`);
+    }
     return;
   }
 
