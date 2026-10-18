@@ -1,0 +1,16 @@
+{
+  "name": "glance-cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Turn a branch into a Glance review map, locally or as a secret link",
+  "type": "module",
+  "bin": {
+    "glance": "bin/glance.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "typescript": "5.6.3"
+  }
+}
