@@ -72,6 +72,9 @@ export function readCode(path, text) {
           imports.set(el.name.text, { source, imported: (el.propertyName || el.name).text });
         }
       }
+      if (clause?.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
+        imports.set(clause.namedBindings.name.text, { source, imported: "*" });
+      }
     }
 
     if (owner) {
@@ -79,6 +82,10 @@ export function readCode(path, text) {
       if (ts.isCallExpression(node) || ts.isNewExpression(node)) callee = node.expression;
       else if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) callee = node.tagName;
       if (callee && ts.isIdentifier(callee)) owner.calls.add(callee.text);
+      // ns.fn() through `import * as ns`; resolved against the imports later.
+      else if (callee && ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression)) {
+        owner.calls.add(`${callee.expression.text}.${callee.name.text}`);
+      }
     }
 
     if (ts.isCatchClause(node)) {

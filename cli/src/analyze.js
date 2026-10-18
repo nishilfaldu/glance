@@ -143,9 +143,12 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
   for (const rec of records.values()) {
     if (!rec.unit) continue;
     const { imports } = code.get(rec.path);
-    for (const name of rec.unit.calls) {
+    for (const call of rec.unit.calls) {
       let target = null;
+      // "ns.fn" only resolves when ns is an `import * as ns`; other property calls stay unresolved.
+      const [name, member] = call.split(".");
       const imp = imports.get(name);
+      if (member && imp?.imported !== "*") continue;
       if (!imp) target = findLocal(rec.path, name, false);
       else if (packageName(imp.source)) {
         const pkg = packageName(imp.source);
@@ -154,33 +157,37 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
           .sort((a, b) => b.path.length - a.path.length)[0];
       } else {
         const file = resolveImport(rec.path, imp.source, fileSet);
-        if (file) target = findLocal(file, imp.imported, imp.imported === "default");
+        const exported = member || imp.imported;
+        if (file) target = findLocal(file, exported, exported === "default");
       }
       if (target && target !== rec) rec.calls.add(target.id);
     }
   }
 
-  // 3. Functions with no call path to the main change. The main change is the function most others call.
+  // 3. Functions with no call path to the main change: the largest group of touched code connected by calls.
   const isCode = (r) => (r.kind === "fn" || r.kind === "route") && !TEST_FILE.test(r.path);
   const neighbours = new Map([...records.keys()].map((id) => [id, new Set()]));
-  const incoming = new Map();
   for (const rec of records.values()) {
     if (TEST_FILE.test(rec.path)) continue;
     for (const to of rec.calls) {
       neighbours.get(rec.id).add(to);
       neighbours.get(to).add(rec.id);
-      incoming.set(to, (incoming.get(to) || 0) + 1);
     }
   }
-  const core = [...records.values()].filter(isCode).sort((a, b) => (incoming.get(b.id) || 0) - (incoming.get(a.id) || 0))[0];
-  if (core) {
-    const reached = new Set([core.id]);
-    const queue = [core.id];
-    while (queue.length) for (const n of neighbours.get(queue.shift())) if (!reached.has(n)) { reached.add(n); queue.push(n); }
-    if (reached.size > 1) {
-      for (const rec of records.values()) {
-        if (isCode(rec) && !reached.has(rec.id)) { rec.stray = true; rec.flags.push("not connected to the main change"); }
-      }
+  const groupOf = new Map();
+  let main = null;
+  for (const rec of records.values()) {
+    if (!isCode(rec) || groupOf.has(rec.id)) continue;
+    const group = new Set([rec.id]);
+    const queue = [rec.id];
+    while (queue.length) for (const n of neighbours.get(queue.shift())) if (!group.has(n)) { group.add(n); queue.push(n); }
+    for (const id of group) groupOf.set(id, group);
+    const size = (g) => [...g].filter((id) => isCode(records.get(id))).length;
+    if (!main || size(group) > size(main)) main = group;
+  }
+  if (main && main.size > 1) {
+    for (const rec of records.values()) {
+      if (isCode(rec) && !main.has(rec.id)) { rec.stray = true; rec.flags.push("not connected to the main change"); }
     }
   }
 
