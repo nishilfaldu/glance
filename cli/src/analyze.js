@@ -62,16 +62,18 @@ function depChanges(baseText, headText) {
   return out;
 }
 
-export function analyze({ cwd, base, head = "HEAD", title }) {
+export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
   const root = git.repoRoot(cwd);
   const baseRef = base || git.defaultBase(root);
-  const from = git.mergeBase(root, baseRef, head);
-  const headFiles = git.listFiles(root, head);
+  const from = git.mergeBase(root, baseRef, working ? "HEAD" : head);
+  // What is being reviewed: a commit, or the working tree with its uncommitted changes.
+  const read = (path) => (working ? git.readWorking(root, path) : git.show(root, head, path));
+  const headFiles = working ? git.workingFiles(root) : git.listFiles(root, head);
   const fileSet = new Set(headFiles);
-  const skipPatterns = parseGlanceYml(git.show(root, head, ".glance.yml")).skip.map(globToRegExp);
+  const skipPatterns = parseGlanceYml(read(".glance.yml")).skip.map(globToRegExp);
 
-  const changes = new Map(); // path -> { status, oldPath, state, records, flags }
-  for (const c of git.changedFiles(root, from, head)) {
+  const changes = new Map(); // path -> { status, oldPath, untracked?, state, records, flags }
+  for (const c of working ? git.workingChanges(root, from) : git.changedFiles(root, from, head)) {
     if (c.status === "D") continue; // deleted files are not in the tree at head
     changes.set(c.path, { ...c, state: c.status === "A" ? "new" : "changed", records: [], flags: [] });
   }
@@ -80,9 +82,12 @@ export function analyze({ cwd, base, head = "HEAD", title }) {
   const records = new Map(); // id -> { id, path, name, kind, state, unit, calls, flags }
   const code = new Map();    // path -> readCode() result
   for (const [path, change] of changes) {
-    const text = git.show(root, head, path);
+    const text = read(path);
     if (shouldSkip(path, text, skipPatterns)) { change.state = "skip"; continue; }
-    const diff = git.fileDiff(root, from, head, change.oldPath, path);
+    // git has no diff for untracked files: every line is new.
+    const diff = change.untracked
+      ? { added: (text || "").split("\n").map((t, i) => ({ line: i + 1, text: t })), removed: [] }
+      : git.fileDiff(root, from, working ? null : head, change.oldPath, path);
     const baseText = change.status === "A" ? null : git.show(root, from, change.oldPath);
     const isTest = TEST_FILE.test(path);
 
@@ -230,14 +235,14 @@ export function analyze({ cwd, base, head = "HEAD", title }) {
   // Folders first, then root files, matching the order the viewer draws them in, so spot numbers read top to bottom.
   const rootDirs = [...tree.dirs.values()].map(build);
   const rootOut = { name: tree.name, files: tree.files.map(fileEntry), dirs: rootDirs };
-  const headName = git.branchName(root, head);
+  const headName = git.branchName(root, working ? "HEAD" : head);
   const fnCount = [...changes.values()].reduce((n, c) => n + c.records.length, 0);
   return {
     brief: {
       version: 1,
       repo: tree.name,
-      title: title || git.firstSubject(root, from, head) || headName,
-      head: headName,
+      title: title || git.firstSubject(root, from, working ? "HEAD" : head) || headName,
+      head: working ? `${headName} + uncommitted` : headName,
       base: baseRef,
       root: rootOut,
     },

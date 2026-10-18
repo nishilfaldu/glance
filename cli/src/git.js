@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 export function git(cwd, args) {
   return execFileSync("git", args, { cwd, encoding: "utf8", maxBuffer: 512 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
@@ -43,26 +45,49 @@ export function listFiles(root, rev) {
   return git(root, ["ls-tree", "-r", "-z", "--name-only", rev]).split("\0").filter(Boolean);
 }
 
-// Returns [{ status: "A" | "M" | "D" | "R" | ..., path, oldPath }]
-export function changedFiles(root, from, to) {
-  const parts = git(root, ["diff", "--name-status", "-z", "-M", from, to]).split("\0").filter((p) => p !== "");
-  const out = [];
+function parseNameStatus(out) {
+  const parts = out.split("\0").filter((p) => p !== "");
+  const changes = [];
   for (let i = 0; i < parts.length; ) {
     const status = parts[i++][0];
     if (status === "R" || status === "C") {
       const oldPath = parts[i++];
-      out.push({ status, oldPath, path: parts[i++] });
+      changes.push({ status, oldPath, path: parts[i++] });
     } else {
       const path = parts[i++];
-      out.push({ status, oldPath: path, path });
+      changes.push({ status, oldPath: path, path });
     }
   }
-  return out;
+  return changes;
+}
+
+// Returns [{ status: "A" | "M" | "D" | "R" | ..., path, oldPath }]
+export function changedFiles(root, from, to) {
+  return parseNameStatus(git(root, ["diff", "--name-status", "-z", "-M", from, to]));
+}
+
+// The working tree: tracked files that still exist, plus untracked files that aren't ignored.
+export function workingFiles(root) {
+  const paths = git(root, ["ls-files", "-z", "--cached", "--others", "--exclude-standard"]).split("\0").filter(Boolean);
+  return [...new Set(paths)].filter((p) => existsSync(join(root, p)));
+}
+
+// Changes from a commit to the working tree, staged or not. Untracked files count as added.
+export function workingChanges(root, from) {
+  const tracked = parseNameStatus(git(root, ["diff", "--name-status", "-z", "-M", from]));
+  const untracked = git(root, ["ls-files", "-z", "--others", "--exclude-standard"]).split("\0").filter(Boolean);
+  return tracked.concat(untracked.map((path) => ({ status: "A", oldPath: path, path, untracked: true })));
+}
+
+export function readWorking(root, path) {
+  const file = join(root, path);
+  return existsSync(file) ? readFileSync(file, "utf8") : null;
 }
 
 // Returns { added: [{ line, text }], removed: [{ anchor, text }] } with line numbers in the new file.
+// With no `to`, compares against the working tree.
 export function fileDiff(root, from, to, oldPath, path) {
-  const out = git(root, ["diff", "-U0", "-M", from, to, "--", oldPath, path]);
+  const out = git(root, ["diff", "-U0", "-M", from, ...(to ? [to] : []), "--", oldPath, path]);
   const added = [], removed = [];
   let next = 0;
   for (const line of out.split("\n")) {

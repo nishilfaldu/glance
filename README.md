@@ -11,6 +11,7 @@ cd cli && npm install && npm link   # once
 glance                # open the review page for this branch in your browser
 glance publish        # upload it and print a secret link for the pull request
 glance publish --pr   # …and put the link in this branch's PR description (via gh)
+glance --working      # include uncommitted changes (local review only)
 glance json           # print the brief as JSON
 glance --help
 ```

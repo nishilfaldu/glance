@@ -2,7 +2,7 @@
 import { parseArgs } from "node:util";
 import { analyze } from "../src/analyze.js";
 import { publishSettings, saveId, savedId } from "../src/config.js";
-import { linkOnPullRequest } from "../src/pr.js";
+import { findPullRequest, linkOnPullRequest } from "../src/pr.js";
 import { openInBrowser, serveLocally } from "../src/serve.js";
 
 const HELP = `glance: map a branch's changes for review
@@ -15,7 +15,10 @@ Usage
 Options
   --base <ref>     Branch to compare against (default: origin's default branch, then main/master)
   --head <ref>     Commit or branch to review (default: HEAD)
-  --title <text>   Title shown on the page (default: first commit message on the branch)
+  --working        Include uncommitted changes, staged or not, and untracked files.
+                   For your own review; it can't be published.
+  --title <text>   Title shown on the page (default: the pull request's title with --pr,
+                   otherwise the first commit message on the branch)
   --pr [number]    With publish: put the link in the pull request's description
                    (default: the pull request for this branch). Uses the gh CLI.
   --port <n>       Port for the local page (default: any free port)
@@ -35,6 +38,7 @@ const { values, positionals } = parseArgs({
     head: { type: "string", default: "HEAD" },
     title: { type: "string" },
     pr: { type: "string" },
+    working: { type: "boolean", default: false },
     port: { type: "string", default: "0" },
     "no-open": { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
@@ -48,8 +52,18 @@ async function main() {
     process.exit(values.help ? 0 : 1);
   }
   if (values.pr && command !== "publish") throw new Error("--pr only works with glance publish.");
+  if (values.working && command === "publish") throw new Error("--working is for your own review. Commit and push, then publish.");
+  if (values.working && values.head !== "HEAD") throw new Error("--working reviews the current checkout; leave out --head.");
 
-  const { brief, stats, root } = analyze({ cwd: process.cwd(), base: values.base, head: values.head, title: values.title });
+  const cwd = process.cwd();
+  const pull = values.pr ? findPullRequest(cwd, values.pr === "current" ? null : values.pr) : null;
+  const { brief, stats, root } = analyze({
+    cwd,
+    base: values.base,
+    head: values.head,
+    working: values.working,
+    title: values.title || (pull && pull.title),
+  });
 
   if (command === "json") {
     process.stdout.write(`${JSON.stringify(brief, null, 2)}\n`);
@@ -71,9 +85,9 @@ async function main() {
     if (!res.ok) throw new Error(`Publish failed (${res.status}): ${body.error || "no details"}`);
     saveId(root, brief.head, body.id);
     console.log(body.url);
-    if (values.pr) {
-      const prUrl = linkOnPullRequest(root, values.pr === "current" ? null : values.pr, body.url);
-      console.error(`Linked on ${prUrl}`);
+    if (pull) {
+      linkOnPullRequest(cwd, pull, body.url);
+      console.error(`Linked on ${pull.url}`);
     }
     return;
   }
