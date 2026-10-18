@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Glance</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+  /* Layout: one column — where (whole-repo minimap) above how (affected paths down to functions + calls), same chips in both */
+  :root {
+    --bg: #f6f7f9; --surface: #ffffff; --fg: #1d232b; --muted: #6b7480; --faint: #a7aeb8;
+    --line: #dde1e7; --chip: #f1f3f6; --risk: #b45309; --risk-bg: #fdf3e4;
+    --stray: #5b5fc7; --stray-bg: #eeeffc; --new: #15803d; --accent: #2b6cb0;
+    --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) { :root {
+    --bg: #14171c; --surface: #1b1f26; --fg: #e3e7ed; --muted: #97a0ad; --faint: #5a626e;
+    --line: #2c323c; --chip: #232830; --risk: #f0a64a; --risk-bg: #2e2416;
+    --stray: #a3a6f5; --stray-bg: #24253d; --new: #4ade80; --accent: #79b0ef; color-scheme: dark } }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--sans);
+    padding-block: 32px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  [hidden] { display: none !important; }
+  .wrap { max-width: 860px; margin: 0 auto; display: grid; gap: 16px; }
+  h1 { font-size: 22px; line-height: 1.25; margin: 0; text-wrap: balance; }
+  .branch { font: 13px var(--mono); color: var(--muted); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+    padding: 20px 24px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; min-width: 0; }
+  .label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .message { color: var(--muted); }
+
+  /* Shared chips */
+  .dir { display: inline-flex; align-items: center; gap: 5px; font: 500 12.5px var(--mono); color: var(--muted); padding: 3px 0; white-space: nowrap; }
+  .file { display: inline-flex; align-items: center; gap: 5px; font: 12.5px var(--mono);
+    padding: 3px 7px; border-radius: 5px; border: 1px solid transparent; background: var(--chip);
+    color: var(--fg); white-space: nowrap; }
+  .file.same { background: none; color: var(--faint); }
+  .file.same svg { opacity: .45; }
+  .file.skip { background: none; border-style: dashed; border-color: var(--line); color: var(--faint); cursor: pointer; }
+  .fn { display: inline-flex; align-items: center; gap: 5px; font: 11.5px var(--mono); padding: 2px 7px;
+    border-radius: 5px; border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+    white-space: nowrap; cursor: pointer; max-width: 100%; }
+  .map .fn { white-space: normal; text-align: left; }
+  .fn:focus-visible, .file.skip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .fn.sel, .file.sel { border-color: var(--accent); }
+  .fn.done, .file.done, .fbox.done { opacity: .35; }
+  .fn.done::after { content: "✓"; font-size: 10px; color: var(--muted); }
+  .new { width: 6px; height: 6px; border-radius: 50%; background: var(--new); flex: none; }
+  .badge { font: 600 11px var(--mono); padding: 0 4px; border-radius: 4px; color: var(--risk); background: var(--risk-bg); }
+  .badge.stray { color: var(--stray); background: var(--stray-bg); }
+  .ico { width: 16px; height: 16px; flex: none; }
+  .fn .ico { width: 14px; height: 14px; }
+
+  /* Minimap */
+  .map { display: grid; gap: 6px; }
+  .row { display: grid; grid-template-columns: 104px 1fr; gap: 10px; align-items: start; }
+  .groups { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; align-items: flex-start; }
+  .group { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px 6px;
+    border: 1px solid var(--line); border-left: 3px solid var(--fc); border-radius: 6px; min-width: 0; }
+  .group .files { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-start; }
+  .group > .dir { color: var(--fg); font-weight: 600; padding: 1px 0; }
+  .fbox { display: inline-flex; flex-direction: column; gap: 4px; padding: 3px 7px 5px; border-radius: 6px; background: var(--chip); min-width: 0; max-width: 100%; }
+  .fbox .fhead { display: inline-flex; align-items: center; gap: 5px; font: 12.5px var(--mono); }
+  .fbox .fns { display: flex; flex-wrap: wrap; gap: 3px; padding-left: 21px; }
+
+  /* Graph */
+  .graph-scroll { overflow-x: auto; }
+  .graph { position: relative; }
+  .graph svg.links { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+  .graph .node { position: absolute; transform: translateY(-50%); }
+  .graph .dir { color: var(--fg); }
+  .tree { fill: none; stroke: var(--faint); stroke-width: 1; }
+  .call { fill: none; stroke: var(--fg); stroke-width: 1.5; opacity: .7; transition: opacity .15s; }
+  .call.t { stroke-width: 1.1; opacity: 0; }
+  .arrow { fill: var(--fg); }
+  .graph.focus .call { opacity: .08; }
+  .graph.focus .call.hot { opacity: 1; stroke: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { .call { transition: none; } }
+
+  .strip { position: sticky; bottom: max(8px, env(safe-area-inset-bottom, 0px)); display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 34px;
+    padding: 6px 10px; border-radius: 6px; background: var(--chip); border: 1px solid var(--line); font-size: 13px; }
+  .strip .hint { color: var(--muted); }
+  .strip code { font: 12.5px var(--mono); }
+  .strip button { margin-left: auto; font: 500 12.5px var(--sans); color: var(--fg); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 5px; padding: 3px 10px; cursor: pointer; }
+  .strip button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  @media (max-width: 520px) {
+    .row { grid-template-columns: 1fr; gap: 4px; }
+    .card { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- File, folder and symbol icons, drawn after the Material Icon Theme / VS Code symbol style -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-ts" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#3178c6"/><text x="8.6" y="12.2" font-size="7.2" font-weight="700" font-family="Arial,sans-serif" fill="#fff" text-anchor="middle">TS</text></symbol>
+  <symbol id="i-test" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#0f9d8a"/><path d="M6 3.5h4M7 3.5v3.2L4.2 11.8a1 1 0 0 0 .9 1.5h5.8a1 1 0 0 0 .9-1.5L9 6.7V3.5" stroke="#fff" stroke-width="1.2" fill="none" stroke-linejoin="round"/></symbol>
+  <symbol id="i-json" viewBox="0 0 16 16"><text x="8" y="12" font-size="10" font-weight="700" font-family="Menlo,monospace" fill="#d4a017" text-anchor="middle">{}</text></symbol>
+  <symbol id="i-md" viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="1.5" fill="none" stroke="#42a5f5" stroke-width="1.3"/><path d="M3.5 10.5v-5l2 2.4 2-2.4v5M11 5.5v5m-1.8-1.8L11 10.5l1.8-1.8" stroke="#42a5f5" stroke-width="1.2" fill="none"/></symbol>
+  <symbol id="i-yaml" viewBox="0 0 16 16"><path d="M3 3l3 4.5V13M9 3L6 7.5" stroke="#e5534b" stroke-width="1.8" fill="none" stroke-linecap="round"/><path d="M10 9.5h3.5M10 12.5h3.5" stroke="#e5534b" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-dir" viewBox="0 0 16 16"><path d="M1.5 3.5a1 1 0 0 1 1-1h3.6l1.5 1.6h5.9a1 1 0 0 1 1 1v7.4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z" fill="currentColor"/></symbol>
+  <symbol id="i-fn" viewBox="0 0 16 16"><path d="M8 1.5l5.6 3.2v6.6L8 14.5l-5.6-3.2V4.7z" fill="none" stroke="#b180d7" stroke-width="1.4" stroke-linejoin="round"/><path d="M2.6 4.8L8 8l5.4-3.2M8 8v6.3" fill="none" stroke="#b180d7" stroke-width="1.2"/></symbol>
+  <symbol id="i-case" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.3" fill="none" stroke="#0f9d8a" stroke-width="1.4"/><path d="M5.2 8.2l1.9 1.9 3.8-4" fill="none" stroke="#0f9d8a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-route" viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="10" rx="2" fill="none" stroke="#e0a030" stroke-width="1.3"/><path d="M5 8h6m-2-2l2 2-2 2" fill="none" stroke="#e0a030" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-dep" viewBox="0 0 16 16"><path d="M8 1.5l5.6 3.2v6.6L8 14.5l-5.6-3.2V4.7z" fill="#cb3837"/><path d="M2.6 4.8L8 8l5.4-3.2M8 8v6.3" fill="none" stroke="#fff" stroke-width="1.1"/></symbol>
+</svg>
+
+<div class="wrap">
+  <div>
+    <h1 id="title">Loading…</h1>
+    <span class="branch" id="branch"></span>
+  </div>
+
+  <p class="message" id="message" hidden></p>
+
+  <article class="card" id="card" hidden>
+    <section>
+      <div class="label">Where</div>
+      <div class="map" id="map"></div>
+    </section>
+
+    <section>
+      <div class="label">How it connects</div>
+      <div class="graph-scroll"><div class="graph" id="graph"></div></div>
+    </section>
+
+    <div class="strip" id="strip" aria-live="polite"><span class="hint">Select a function to mark it reviewed</span></div>
+  </article>
+</div>
+
+<script>
+  // Brief data shape: { repo, title, head, base, tree }.
+  // File state: "changed" | "new" | "same" | "skip". Function kind: fn | case (test) | route | dep; state: "new" | "changed".
+  // calls: ids ("path#name") of affected functions this one calls. spot: number shown on the file or function.
+  var marks = ["", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"];
+  var kindIcon = { fn: "fn", case: "case", route: "route", dep: "dep" };
+
+  function sourceFor(id) {
+    if (id === "sample") return "/sample.json";
+    return null; // Blob storage is not connected yet
+  }
+
+  function showMessage(title, text) {
+    document.getElementById("title").textContent = title;
+    var m = document.getElementById("message");
+    m.textContent = text;
+    m.hidden = false;
+  }
+
+  var id = (location.pathname.match(/^\/r\/([A-Za-z0-9_-]+)\/?$/) || [])[1];
+  var src = id && sourceFor(id);
+  if (!src) {
+    showMessage("Brief not found", "This link doesn't point to a brief. Check that you copied the whole link from the pull request.");
+  } else {
+    fetch(src)
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (data) { render(id, data); })
+      .catch(function () {
+        showMessage("Brief not found", "This brief may have expired or been removed. Ask for a new link on the pull request.");
+      });
+  }
+
+  function render(briefId, data) {
+    document.title = data.title + " · Glance";
+    document.getElementById("title").textContent = data.title;
+    document.getElementById("branch").textContent = data.head + " → " + data.base;
+    document.getElementById("card").hidden = false;
+
+    var tree = data.tree;
+    var storeKey = "glance-done-" + briefId;
+    var done = {};
+    try { done = JSON.parse(localStorage.getItem(storeKey) || "{}"); } catch (e) {}
+    var strip = document.getElementById("strip");
+    var chips = {};      // function id -> chips showing it
+    var fileEls = {};    // file path -> boxes/chips showing it
+    var files = [];      // changed files with their path, for done roll-up
+
+    function esc(s) {
+      return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
+    }
+    function icon(name, color) {
+      return '<svg class="ico"' + (color ? ' style="color:' + esc(color) + '"' : "") + '><use href="#i-' + esc(name) + '"/></svg>';
+    }
+    function dirLabel(name, color) {
+      return '<span class="dir">' + icon("dir", color) + esc(name) + "/</span>";
+    }
+    function badge(x) {
+      return x.spot ? '<span class="badge' + (x.stray ? " stray" : "") + '">' + (marks[x.spot] || x.spot) + "</span>" : "";
+    }
+    function newDot(x) { return x.state === "new" ? '<span class="new" title="new"></span>' : ""; }
+    function fileHead(f) { return icon(f.icon) + esc(f.name) + newDot(f) + badge(f); }
+    function pathOf(top, g, f) {
+      return (top.dir === "." ? "" : top.dir + "/") + (g.dir ? g.dir + "/" : "") + f.name;
+    }
+    function fnChip(fn, path) {
+      var fid = path + "#" + fn.name;
+      var el = document.createElement("button");
+      el.type = "button";
+      el.className = "fn";
+      el.innerHTML = icon(kindIcon[fn.kind || "fn"]) + esc(fn.name) + newDot(fn) + badge(fn);
+      (chips[fid] = chips[fid] || []).push(el);
+      el.addEventListener("click", function () { select(fid, fn, path); });
+      return el;
+    }
+    function track(path, el) { (fileEls[path] = fileEls[path] || []).push(el); }
+
+    // Where: the whole repo, down to affected functions
+    var map = document.getElementById("map");
+    tree.forEach(function (top) {
+      var row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = top.dir === "." ? '<span class="dir">root</span>' : dirLabel(top.dir, top.color);
+      var groups = document.createElement("div");
+      groups.className = "groups";
+      top.groups.forEach(function (g) {
+        var box = document.createElement("div");
+        box.className = g.dir ? "group" : "groups";
+        var holder = box;
+        if (g.dir) {
+          box.style.setProperty("--fc", g.color);
+          box.innerHTML = dirLabel(g.dir, g.color);
+          holder = document.createElement("div");
+          holder.className = "files";
+          box.appendChild(holder);
+        }
+        g.files.forEach(function (f) {
+          var path = pathOf(top, g, f), el;
+          if (f.fns) {
+            files.push({ path: path, f: f });
+            el = document.createElement("div");
+            el.className = "fbox";
+            el.innerHTML = '<span class="fhead">' + fileHead(f) + '</span><span class="fns"></span>';
+            f.fns.forEach(function (fn) { el.lastChild.appendChild(fnChip(fn, path)); });
+            track(path, el);
+          } else if (f.state === "skip") {
+            el = document.createElement("button");
+            el.type = "button";
+            el.className = "file skip";
+            el.innerHTML = fileHead(f);
+            el.addEventListener("click", function () { selectSkipped(path, el); });
+          } else {
+            el = document.createElement("span");
+            el.className = "file same";
+            el.innerHTML = fileHead(f);
+          }
+          holder.appendChild(el);
+        });
+        groups.appendChild(box);
+      });
+      row.appendChild(groups);
+      map.appendChild(row);
+    });
+
+    // How: only paths that lead to affected functions, from their common parent
+    var GAP = 34, ROW = 36, FILE_DEPTH = 3, FN_DEPTH = 4;
+    var root = { name: data.repo, color: "#78909c", kids: [] };
+    tree.forEach(function (top) {
+      var topNode = top.dir === "." ? root : { name: top.dir, color: top.color, kids: [] };
+      top.groups.forEach(function (g) {
+        var holder = g.dir ? { name: g.dir, color: g.color, kids: [] } : topNode;
+        g.files.forEach(function (f) {
+          if (!f.fns) return;
+          var path = pathOf(top, g, f);
+          holder.kids.push({ file: f, path: path, kids: f.fns.map(function (fn) { return { fn: fn, path: path, id: path + "#" + fn.name }; }) });
+        });
+        if (g.dir && holder.kids.length) topNode.kids.push(holder);
+      });
+      if (top.dir !== "." && topNode.kids.length) root.kids.push(topNode);
+    });
+
+    var graph = document.getElementById("graph");
+    var nodes = [], links = [], byId = {}, rows = 0;
+    (function place(n, depth, parent) {
+      if (n.fn) { n.depth = FN_DEPTH; n.row = rows++; byId[n.id] = n; }
+      else {
+        var first = rows;
+        n.kids.forEach(function (k) { place(k, depth + 1, n); });
+        n.depth = n.file ? FILE_DEPTH : depth;
+        n.row = (first + rows - 1) / 2;
+      }
+      nodes.push(n);
+      if (parent) links.push([parent, n]);
+    })(root, 0, null);
+
+    nodes.forEach(function (n) {
+      var el;
+      if (n.fn) {
+        el = fnChip(n.fn, n.path);
+        el.addEventListener("mouseenter", function () { focusCalls(n.id); });
+        el.addEventListener("mouseleave", function () { focusCalls(null); });
+        el.addEventListener("focus", function () { focusCalls(n.id); });
+        el.addEventListener("blur", function () { focusCalls(null); });
+      } else if (n.file) {
+        el = document.createElement("span");
+        el.className = "file";
+        el.innerHTML = fileHead(n.file);
+        track(n.path, el);
+      } else {
+        el = document.createElement("span");
+        el.innerHTML = dirLabel(n.name, n.color);
+        el = el.firstChild;
+      }
+      el.classList.add("node");
+      el.style.top = n.row * ROW + ROW / 2 + "px";
+      graph.appendChild(el);
+      n.el = el;
+    });
+
+    var NS = "http://www.w3.org/2000/svg";
+    function draw() {
+      var old = graph.querySelector("svg.links");
+      if (old) old.remove();
+      // Each column starts after the widest label in the column before it
+      var colW = [], colX = [0];
+      nodes.forEach(function (n) { colW[n.depth] = Math.max(colW[n.depth] || 0, n.el.offsetWidth); });
+      for (var d = 1; d <= FN_DEPTH; d++) colX[d] = colX[d - 1] + (colW[d - 1] || 0) + GAP;
+      nodes.forEach(function (n) { n.el.style.left = colX[n.depth] + "px"; });
+
+      var svg = document.createElementNS(NS, "svg");
+      svg.setAttribute("class", "links");
+      svg.innerHTML = '<defs><marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path class="arrow" d="M0,0 L8,4 L0,8 z"/></marker></defs>';
+      function right(n) { return n.el.offsetLeft + n.el.offsetWidth; }
+      function cy(n) { return n.row * ROW + ROW / 2; }
+      function path(d, cls, a, b) {
+        var p = document.createElementNS(NS, "path");
+        p.setAttribute("d", d); p.setAttribute("class", cls);
+        if (a) { p.setAttribute("marker-end", "url(#ah)"); p.dataset.a = a; p.dataset.b = b; }
+        svg.appendChild(p);
+      }
+      links.forEach(function (l) {
+        var x1 = right(l[0]) + 4, y1 = cy(l[0]), x2 = l[1].el.offsetLeft - 4, y2 = cy(l[1]), m = (x1 + x2) / 2;
+        path("M" + x1 + " " + y1 + " C" + m + " " + y1 + " " + m + " " + y2 + " " + x2 + " " + y2, "tree");
+      });
+      var width = 0;
+      nodes.forEach(function (n) {
+        if (!n.fn) return;
+        width = Math.max(width, right(n));
+        (n.fn.calls || []).forEach(function (to) {
+          var t = byId[to];
+          if (!t) return;
+          var xs = right(n) + 4, ys = cy(n), xt = right(t) + 5, yt = cy(t);
+          var bulge = 22 + 9 * Math.abs(n.row - t.row);
+          width = Math.max(width, Math.max(xs, xt) + bulge);
+          path("M" + xs + " " + ys + " C" + (xs + bulge) + " " + ys + " " + (xt + bulge) + " " + yt + " " + xt + " " + yt,
+            "call" + (n.fn.kind === "case" ? " t" : ""), n.id, to);
+        });
+      });
+      graph.style.width = width + 16 + "px";
+      graph.style.height = rows * ROW + "px";
+      graph.insertBefore(svg, graph.firstChild);
+    }
+    draw();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+
+    function focusCalls(fid) {
+      graph.classList.toggle("focus", !!fid);
+      graph.querySelectorAll(".call").forEach(function (p) {
+        p.classList.toggle("hot", !!fid && (p.dataset.a === fid || p.dataset.b === fid));
+      });
+    }
+
+    function refreshDone() {
+      Object.keys(chips).forEach(function (fid) {
+        chips[fid].forEach(function (c) { c.classList.toggle("done", !!done[fid]); });
+      });
+      files.forEach(function (x) {
+        var all = x.f.fns.every(function (fn) { return done[x.path + "#" + fn.name]; });
+        fileEls[x.path].forEach(function (el) { el.classList.toggle("done", all); });
+      });
+    }
+    refreshDone();
+
+    function clearSel() {
+      document.querySelectorAll(".sel").forEach(function (c) { c.classList.remove("sel"); });
+    }
+    function selectSkipped(path, el) {
+      clearSel();
+      el.classList.add("sel");
+      strip.innerHTML = "<code>" + esc(path) + '</code><span class="hint">skipped by rule</span>';
+    }
+    function select(fid, fn, path) {
+      clearSel();
+      chips[fid].forEach(function (c) { c.classList.add("sel"); });
+      strip.innerHTML = badge(fn) + "<code>" + esc(path + " · " + fn.name) + "</code>" +
+        '<button type="button" id="mark">' + (done[fid] ? "Unmark" : "Mark reviewed") + "</button>";
+      document.getElementById("mark").addEventListener("click", function () {
+        done[fid] = !done[fid];
+        refreshDone();
+        this.textContent = done[fid] ? "Unmark" : "Mark reviewed";
+        try { localStorage.setItem(storeKey, JSON.stringify(done)); } catch (e) {}
+      });
+    }
+  }
+</script>
+</body>
+</html>
