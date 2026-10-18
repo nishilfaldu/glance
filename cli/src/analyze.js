@@ -136,58 +136,69 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
     }
   }
 
-  // 2. Calls between touched functions, through local names and imports.
+  // 2. Calls, resolved through local names and imports. Every function in a changed code file takes part,
+  //    so a chain through an unchanged helper still connects. Only calls between touched functions are drawn.
   const depRecords = [...records.values()].filter((r) => r.kind === "dep");
-  const findLocal = (path, local, isDefault) =>
-    (changes.get(path)?.records || []).find((r) => r.unit && (isDefault ? r.unit.isDefault : r.unit.local === local));
-  for (const rec of records.values()) {
-    if (!rec.unit) continue;
-    const { imports } = code.get(rec.path);
-    for (const call of rec.unit.calls) {
-      let target = null;
-      // "ns.fn" only resolves when ns is an `import * as ns`; other property calls stay unresolved.
-      const [name, member] = call.split(".");
-      const imp = imports.get(name);
-      if (member && imp?.imported !== "*") continue;
-      if (!imp) target = findLocal(rec.path, name, false);
-      else if (packageName(imp.source)) {
-        const pkg = packageName(imp.source);
-        target = depRecords
-          .filter((d) => d.name === pkg && rec.path.startsWith(d.path.replace(/package\.json$/, "")))
-          .sort((a, b) => b.path.length - a.path.length)[0];
-      } else {
-        const file = resolveImport(rec.path, imp.source, fileSet);
-        const exported = member || imp.imported;
-        if (file) target = findLocal(file, exported, exported === "default");
+  const recordByUnit = new Map([...records.values()].filter((r) => r.unit).map((r) => [r.unit, r]));
+  const nodeId = (path, unit) => recordByUnit.get(unit)?.id || `${path}#${unit.name}@${unit.start}`;
+  const findLocal = (path, local, isDefault) => {
+    const unit = code.get(path)?.units.find((u) => (isDefault ? u.isDefault : u.local === local));
+    return unit ? nodeId(path, unit) : null;
+  };
+  const resolve = (path, imports, call) => {
+    // "ns.fn" only resolves when ns is an `import * as ns`; other property calls stay unresolved.
+    const [name, member] = call.split(".");
+    const imp = imports.get(name);
+    if (member && imp?.imported !== "*") return null;
+    if (!imp) return findLocal(path, name, false);
+    const pkg = packageName(imp.source);
+    if (pkg) {
+      const dep = depRecords
+        .filter((d) => d.name === pkg && path.startsWith(d.path.replace(/package\.json$/, "")))
+        .sort((a, b) => b.path.length - a.path.length)[0];
+      return dep ? dep.id : null;
+    }
+    const file = resolveImport(path, imp.source, fileSet);
+    const exported = member || imp.imported;
+    return file ? findLocal(file, exported, exported === "default") : null;
+  };
+
+  const neighbours = new Map();
+  const link = (a, b) => {
+    for (const [x, y] of [[a, b], [b, a]]) {
+      if (!neighbours.has(x)) neighbours.set(x, new Set());
+      neighbours.get(x).add(y);
+    }
+  };
+  for (const [path, parsed] of code) {
+    for (const unit of parsed.units) {
+      const caller = nodeId(path, unit);
+      for (const call of unit.calls) {
+        const callee = resolve(path, parsed.imports, call);
+        if (!callee || callee === caller) continue;
+        if (records.has(caller) && records.has(callee)) records.get(caller).calls.add(callee);
+        if (!TEST_FILE.test(path)) link(caller, callee); // tests connect everything, so they don't count
       }
-      if (target && target !== rec) rec.calls.add(target.id);
     }
   }
 
-  // 3. Functions with no call path to the main change: the largest group of touched code connected by calls.
+  // 3. Touched code with no call path to the main change: the largest group of touched code connected by calls.
   const isCode = (r) => (r.kind === "fn" || r.kind === "route") && !TEST_FILE.test(r.path);
-  const neighbours = new Map([...records.keys()].map((id) => [id, new Set()]));
-  for (const rec of records.values()) {
-    if (TEST_FILE.test(rec.path)) continue;
-    for (const to of rec.calls) {
-      neighbours.get(rec.id).add(to);
-      neighbours.get(to).add(rec.id);
-    }
-  }
-  const groupOf = new Map();
+  const touchedCode = [...records.values()].filter(isCode);
+  const seen = new Set();
   let main = null;
-  for (const rec of records.values()) {
-    if (!isCode(rec) || groupOf.has(rec.id)) continue;
+  for (const rec of touchedCode) {
+    if (seen.has(rec.id)) continue;
     const group = new Set([rec.id]);
     const queue = [rec.id];
-    while (queue.length) for (const n of neighbours.get(queue.shift())) if (!group.has(n)) { group.add(n); queue.push(n); }
-    for (const id of group) groupOf.set(id, group);
-    const size = (g) => [...g].filter((id) => isCode(records.get(id))).length;
-    if (!main || size(group) > size(main)) main = group;
+    while (queue.length) for (const n of neighbours.get(queue.shift()) || []) if (!group.has(n)) { group.add(n); queue.push(n); }
+    for (const id of group) seen.add(id);
+    const size = touchedCode.filter((r) => group.has(r.id)).length;
+    if (!main || size > main.size) main = { group, size };
   }
   if (main && main.size > 1) {
-    for (const rec of records.values()) {
-      if (isCode(rec) && !main.has(rec.id)) { rec.stray = true; rec.flags.push("not connected to the main change"); }
+    for (const rec of touchedCode) {
+      if (!main.group.has(rec.id)) { rec.stray = true; rec.flags.push("not connected to the main change"); }
     }
   }
 
