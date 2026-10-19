@@ -9,7 +9,7 @@
 <script>try { var t = localStorage.getItem("glance-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
 <style>
-  /* Layout: one column — where (whole-repo minimap) above how (affected paths down to functions + calls), same chips in both */
+  /* Layout: two tabs — repo map (whole-repo minimap) and call graph (affected paths down to functions + calls), same chips in both */
   :root {
     --bg: #ffffff; --surface: #ffffff; --fg: #171717; --muted: #666666; --faint: #a8a8a8;
     --line: #ebebeb; --chip: #f5f5f5; --risk: #a35200; --risk-bg: #fff4e5;
@@ -163,15 +163,15 @@
 
   <article class="card" id="card" hidden>
     <div class="tabs" role="tablist" aria-label="View">
-      <button type="button" role="tab" id="tab-where" data-tab="where" aria-controls="panel-where">Where</button>
-      <button type="button" role="tab" id="tab-how" data-tab="how" aria-controls="panel-how">How it connects</button>
+      <button type="button" role="tab" id="tab-map" data-tab="map" aria-controls="panel-map">Repo map</button>
+      <button type="button" role="tab" id="tab-calls" data-tab="calls" aria-controls="panel-calls">Call graph</button>
     </div>
 
-    <section class="panel" role="tabpanel" id="panel-where" aria-labelledby="tab-where">
+    <section class="panel" role="tabpanel" id="panel-map" aria-labelledby="tab-map">
       <div class="map" id="map"></div>
     </section>
 
-    <section class="panel" role="tabpanel" id="panel-how" aria-labelledby="tab-how" hidden>
+    <section class="panel" role="tabpanel" id="panel-calls" aria-labelledby="tab-calls" hidden>
       <div class="graph-scroll"><div class="graph" id="graph"></div></div>
     </section>
 
@@ -315,7 +315,7 @@
       });
     }
 
-    // Where: the whole repo, down to touched functions
+    // Repo map: the whole repo, down to touched functions
     var map = document.getElementById("map");
     var root = data.root;
     function mapRow(label, fill) {
@@ -335,7 +335,7 @@
       mapRow('<span class="dir">root</span>', function (holder) { fillDir(holder, { files: root.files }, ""); });
     }
 
-    // How: only paths that lead to touched files, from their common parent
+    // Call graph: only paths that lead to touched files, from their common parent
     var GAP = 34, ROW = 36;
     function affected(dir, prefix, depth) {
       var fileKids = [], dirKids = [];
@@ -446,7 +446,7 @@
     }
 
     // Tabs: one view at a time. The graphs measure their chips, so each is drawn when its tab is shown.
-    var drawers = { how: draw };
+    var drawers = { calls: draw };
     var tabs = [].slice.call(document.querySelectorAll('[role="tab"]'));
     var current;
     function showTab(name) {
@@ -472,7 +472,7 @@
     });
     var saved = null;
     try { saved = localStorage.getItem("glance-tab"); } catch (e) {}
-    showTab(tabs.some(function (t) { return t.dataset.tab === saved; }) ? saved : "where");
+    showTab(tabs.some(function (t) { return t.dataset.tab === saved; }) ? saved : "map");
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (drawers[current]) drawers[current](); });
 
     function focusCalls(box, fid) {
