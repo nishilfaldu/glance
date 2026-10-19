@@ -3,7 +3,8 @@
   "buildCommand": "",
   "outputDirectory": "public",
   "rewrites": [
-    { "source": "/r/:id", "destination": "/viewer.html" }
+    { "source": "/r/:id", "destination": "/viewer.html" },
+    { "source": "/demo", "destination": "/demo.html" }
   ],
   "headers": [
     {
@@ -13,7 +14,7 @@
       ]
     },
     {
-      "source": "/(r|api|viewer\\.html|sample\\.json)(.*)",
+      "source": "/(r|api|viewer\\.html|sample\\.json|demo)(.*)",
       "headers": [
         { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
       ]
