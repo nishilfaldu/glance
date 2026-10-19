@@ -63,7 +63,8 @@
     padding: 3px 7px; border-radius: 5px; border: 1px solid transparent; background: var(--chip);
     color: var(--fg); white-space: nowrap; }
   .file.same { background: none; color: var(--faint); }
-  .file.same svg { opacity: .45; }
+  /* Color is for what changed: unchanged files and folders get gray icons */
+  .file.same .ico, .quiet > .dir .ico, .folded .ico { filter: grayscale(1); opacity: .45; }
   .file.skip { background: none; border-style: dashed; border-color: var(--line); color: var(--faint); cursor: pointer; }
   .fn { display: inline-flex; align-items: center; gap: 5px; font: 11.5px var(--mono); padding: 2px 7px;
     border-radius: 5px; border: 1px solid var(--line); background: var(--surface); color: var(--fg);
@@ -80,13 +81,15 @@
   .fn .ico { width: 14px; height: 14px; }
 
   /* Minimap */
-  .map { display: grid; gap: 6px; }
+  .map { display: grid; gap: 10px; }
   .row { display: grid; grid-template-columns: 104px 1fr; gap: 10px; align-items: start; }
   .groups { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; align-items: flex-start; }
   .group { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px 6px;
     border: 1px solid var(--line); border-radius: 6px; min-width: 0; }
   .group .files { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-start; }
   .group > .dir { color: var(--fg); font-weight: 600; padding: 1px 0; }
+  .group.quiet { border-color: transparent; }
+  .group.quiet > .dir { color: var(--muted); font-weight: 500; }
   .fbox { display: inline-flex; flex-direction: column; gap: 4px; padding: 3px 7px 5px; border-radius: 6px; background: var(--chip); min-width: 0; max-width: 100%; }
   .fbox .fhead { display: inline-flex; align-items: center; gap: 5px; font: 12.5px var(--mono); }
   .fbox .fns { display: flex; flex-wrap: wrap; gap: 3px; padding-left: 21px; }
@@ -266,6 +269,9 @@
       if (html) e.innerHTML = html;
       return e;
     }
+    function touched(dir) {
+      return !dir.collapsed && ((dir.files || []).some(function (f) { return f.state !== "same"; }) || (dir.dirs || []).some(touched));
+    }
     function remember(rid, node) { (chips[rid] = chips[rid] || []).push(node); }
     function track(path, node) { (fileEls[path] = fileEls[path] || []).push(node); }
 
@@ -307,7 +313,7 @@
       if (dir.more) holder.appendChild(el("span", "more", "+" + dir.more + " more"));
       (dir.dirs || []).forEach(function (sub) {
         if (sub.collapsed) return holder.appendChild(folded(sub));
-        var box = el("div", "group", dirLabel(sub.name, sub.color));
+        var box = el("div", touched(sub) ? "group" : "group quiet", dirLabel(sub.name, sub.color));
         var inner = el("div", "files");
         box.appendChild(inner);
         fillDir(inner, sub, join(prefix, sub.name));
@@ -318,8 +324,8 @@
     // Repo map: the whole repo, down to touched functions
     var map = document.getElementById("map");
     var root = data.root;
-    function mapRow(label, fill) {
-      var row = el("div", "row", label);
+    function mapRow(label, fill, quiet) {
+      var row = el("div", quiet ? "row quiet" : "row", label);
       var groups = el("div", "groups");
       fill(groups);
       row.appendChild(groups);
@@ -329,7 +335,7 @@
       mapRow(dirLabel(top.name, top.color), function (holder) {
         if (top.collapsed) holder.appendChild(el("span", "more", top.count + " files"));
         else fillDir(holder, top, top.name);
-      });
+      }, !touched(top));
     });
     if ((root.files || []).length) {
       mapRow('<span class="dir">root</span>', function (holder) { fillDir(holder, { files: root.files }, ""); });
