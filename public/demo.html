@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="data:,">
+<title>Glance demo</title>
+<!-- The docs demo: a copy of the tabbed viewer, showing demo.json. Once that viewer is on main, point the docs at /r/sample and delete this file. -->
+<script>try { var t = localStorage.getItem("glance-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<!-- ?embed: shown inside the docs page, without the theme switch; ?tab=map|calls picks the first tab -->
+<script>var params = new URLSearchParams(location.search); if (params.has("embed")) document.documentElement.classList.add("embed");</script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+  /* Layout: two tabs — repo map (whole-repo minimap) and call graph (affected paths down to functions + calls), same chips in both */
+  :root {
+    --bg: #ffffff; --surface: #ffffff; --fg: #171717; --muted: #666666; --faint: #a8a8a8;
+    --line: #ebebeb; --chip: #f5f5f5; --risk: #a35200; --risk-bg: #fff4e5;
+    --stray: #0068d6; --stray-bg: #e9f4ff; --new: #107d32; --accent: #171717;
+    --sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    color-scheme: light;
+  }
+  /* Dark follows the system unless the theme switch picked one; the two blocks below must stay identical */
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #000000; --surface: #0a0a0a; --fg: #ededed; --muted: #a1a1a1; --faint: #575757;
+    --line: #262626; --chip: #1a1a1a; --risk: #f5a524; --risk-bg: #261a06;
+    --stray: #52a8ff; --stray-bg: #0d1a2b; --new: #45d483; --accent: #ededed; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #000000; --surface: #0a0a0a; --fg: #ededed; --muted: #a1a1a1; --faint: #575757;
+    --line: #262626; --chip: #1a1a1a; --risk: #f5a524; --risk-bg: #261a06;
+    --stray: #52a8ff; --stray-bg: #0d1a2b; --new: #45d483; --accent: #ededed; color-scheme: dark }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--sans);
+    padding-block: 32px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  [hidden] { display: none !important; }
+  .wrap { max-width: 860px; margin: 0 auto; display: grid; gap: 16px; }
+  h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; margin: 0; text-wrap: balance; }
+  .branch { font: 13px var(--mono); color: var(--muted); }
+  .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .themes { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 999px; flex: none; }
+  .themes button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 999px;
+    background: none; color: var(--muted); cursor: pointer; }
+  .themes button:hover { color: var(--fg); }
+  .themes button[aria-pressed="true"] { background: var(--chip); color: var(--fg); }
+  .themes button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .themes svg { width: 15px; height: 15px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px 24px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; min-width: 0; }
+  .label { font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: 10px; }
+  .tabs { display: flex; gap: 4px; margin: -8px 0 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .tabs button { font: 500 13.5px var(--sans); color: var(--muted); background: none; border: 0; border-bottom: 2px solid transparent;
+    margin-bottom: -1px; padding: 8px 10px 10px; cursor: pointer; white-space: nowrap; }
+  .tabs button:hover { color: var(--fg); }
+  .tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--fg); }
+  .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+  .panel { display: grid; gap: 22px; min-width: 0; }
+  .message { color: var(--muted); }
+
+  /* Shared chips */
+  .dir { display: inline-flex; align-items: center; gap: 5px; font: 500 12.5px var(--mono); color: var(--muted); padding: 3px 0; white-space: nowrap; }
+  .file { display: inline-flex; align-items: center; gap: 5px; font: 12.5px var(--mono);
+    padding: 3px 7px; border-radius: 5px; border: 1px solid transparent; background: var(--chip);
+    color: var(--fg); white-space: nowrap; }
+  .file.same { background: none; color: var(--faint); }
+  /* Color is for what changed: unchanged files and folders get gray icons */
+  .file.same .ico, .quiet > .dir .ico, .folded .ico { filter: grayscale(1); opacity: .45; }
+  .file.skip { background: none; border-style: dashed; border-color: var(--line); color: var(--faint); cursor: pointer; }
+  .fn { display: inline-flex; align-items: center; gap: 5px; font: 11.5px var(--mono); padding: 2px 7px;
+    border-radius: 5px; border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+    white-space: nowrap; cursor: pointer; max-width: 100%; }
+  .map .fn { white-space: normal; text-align: left; }
+  .fn:focus-visible, .file.skip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .fn.sel, .file.sel { border-color: var(--accent); }
+  .fn.done, .file.done, .fbox.done { opacity: .35; }
+  .fn.done::after { content: "✓"; font-size: 10px; color: var(--muted); }
+  .new { width: 6px; height: 6px; border-radius: 50%; background: var(--new); flex: none; }
+  .badge { font: 600 11px var(--mono); padding: 0 4px; border-radius: 4px; color: var(--risk); background: var(--risk-bg); }
+  .badge.stray { color: var(--stray); background: var(--stray-bg); }
+  .ico { width: 16px; height: 16px; flex: none; }
+  .fn .ico { width: 14px; height: 14px; }
+
+  /* Minimap */
+  .map { display: grid; gap: 10px; }
+  .row { display: grid; grid-template-columns: 104px 1fr; gap: 10px; align-items: start; }
+  .groups { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; align-items: flex-start; }
+  .group { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px 6px;
+    border: 1px solid var(--line); border-radius: 6px; min-width: 0; }
+  .group .files { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-start; }
+  .group > .dir { color: var(--fg); font-weight: 600; padding: 1px 0; }
+  .group.quiet { border-color: transparent; }
+  .group.quiet > .dir { color: var(--muted); font-weight: 500; }
+  .fbox { display: inline-flex; flex-direction: column; gap: 4px; padding: 3px 7px 5px; border-radius: 6px; background: var(--chip); min-width: 0; max-width: 100%; }
+  .fbox .fhead { display: inline-flex; align-items: center; gap: 5px; font: 12.5px var(--mono); }
+  .fbox .fns { display: flex; flex-wrap: wrap; gap: 3px; padding-left: 21px; }
+  .file.solo { cursor: pointer; }
+  .folded { display: inline-flex; align-items: center; gap: 5px; font: 12.5px var(--mono); color: var(--faint);
+    padding: 3px 7px; border: 1px dashed var(--line); border-radius: 5px; white-space: nowrap; }
+  .folded .count, .more { font: 11.5px var(--mono); color: var(--faint); }
+  .more { padding: 3px 4px; align-self: center; }
+
+  /* Graph */
+  .graph-scroll { overflow-x: auto; }
+  .graph { position: relative; }
+  .graph svg.links { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+  .graph .node { position: absolute; transform: translateY(-50%); }
+  .graph .dir { color: var(--fg); }
+  .tree { fill: none; stroke: var(--faint); stroke-width: 1; }
+  .call { fill: none; stroke: var(--fg); stroke-width: 1.5; opacity: .7; transition: opacity .15s; }
+  .call.t { stroke-width: 1.1; opacity: 0; }
+  .arrow { fill: var(--fg); }
+  .graph.focus .call { opacity: .08; }
+  .graph.focus .call.hot { opacity: 1; stroke: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { .call { transition: none; } }
+
+
+  .strip { position: sticky; bottom: max(8px, env(safe-area-inset-bottom, 0px)); display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 34px;
+    padding: 6px 10px; border-radius: 6px; background: var(--chip); border: 1px solid var(--line); font-size: 13px; }
+  .strip .hint { color: var(--muted); }
+  .strip code { font: 12.5px var(--mono); }
+  .strip button { margin-left: auto; font: 500 12.5px var(--sans); color: var(--fg); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 5px; padding: 3px 10px; cursor: pointer; }
+  .strip button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .embed body { padding-block: 20px 24px; background: transparent; }
+  .embed .themes { display: none; }
+  .embed .card { padding: 16px 18px; }
+
+  @media (max-width: 520px) {
+    .row { grid-template-columns: 1fr; gap: 4px; }
+    .card { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- File, folder and symbol icons, drawn after the Material Icon Theme / VS Code symbol style -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-ts" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#3178c6"/><text x="8.6" y="12.2" font-size="7.2" font-weight="700" font-family="Arial,sans-serif" fill="#fff" text-anchor="middle">TS</text></symbol>
+  <symbol id="i-test" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#0f9d8a"/><path d="M6 3.5h4M7 3.5v3.2L4.2 11.8a1 1 0 0 0 .9 1.5h5.8a1 1 0 0 0 .9-1.5L9 6.7V3.5" stroke="#fff" stroke-width="1.2" fill="none" stroke-linejoin="round"/></symbol>
+  <symbol id="i-js" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#f0c419"/><text x="8.6" y="12.2" font-size="7.2" font-weight="700" font-family="Arial,sans-serif" fill="#2b2b2b" text-anchor="middle">JS</text></symbol>
+  <symbol id="i-file" viewBox="0 0 16 16"><path d="M4 1.5h5.5L13 5v9.5H4z" fill="none" stroke="#90a4ae" stroke-width="1.3" stroke-linejoin="round"/><path d="M9.5 1.5V5H13" fill="none" stroke="#90a4ae" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-json" viewBox="0 0 16 16"><text x="8" y="12" font-size="10" font-weight="700" font-family="Menlo,monospace" fill="#d4a017" text-anchor="middle">{}</text></symbol>
+  <symbol id="i-md" viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="1.5" fill="none" stroke="#42a5f5" stroke-width="1.3"/><path d="M3.5 10.5v-5l2 2.4 2-2.4v5M11 5.5v5m-1.8-1.8L11 10.5l1.8-1.8" stroke="#42a5f5" stroke-width="1.2" fill="none"/></symbol>
+  <symbol id="i-yaml" viewBox="0 0 16 16"><path d="M3 3l3 4.5V13M9 3L6 7.5" stroke="#e5534b" stroke-width="1.8" fill="none" stroke-linecap="round"/><path d="M10 9.5h3.5M10 12.5h3.5" stroke="#e5534b" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-dir" viewBox="0 0 16 16"><path d="M1.5 3.5a1 1 0 0 1 1-1h3.6l1.5 1.6h5.9a1 1 0 0 1 1 1v7.4a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z" fill="currentColor"/></symbol>
+  <symbol id="i-fn" viewBox="0 0 16 16"><path d="M8 1.5l5.6 3.2v6.6L8 14.5l-5.6-3.2V4.7z" fill="none" stroke="#b180d7" stroke-width="1.4" stroke-linejoin="round"/><path d="M2.6 4.8L8 8l5.4-3.2M8 8v6.3" fill="none" stroke="#b180d7" stroke-width="1.2"/></symbol>
+  <symbol id="i-case" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.3" fill="none" stroke="#0f9d8a" stroke-width="1.4"/><path d="M5.2 8.2l1.9 1.9 3.8-4" fill="none" stroke="#0f9d8a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-route" viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="10" rx="2" fill="none" stroke="#e0a030" stroke-width="1.3"/><path d="M5 8h6m-2-2l2 2-2 2" fill="none" stroke="#e0a030" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-dep" viewBox="0 0 16 16"><path d="M8 1.5l5.6 3.2v6.6L8 14.5l-5.6-3.2V4.7z" fill="#cb3837"/><path d="M2.6 4.8L8 8l5.4-3.2M8 8v6.3" fill="none" stroke="#fff" stroke-width="1.1"/></symbol>
+  <symbol id="i-system" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 14h5M8 11.5V14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+  <symbol id="i-light" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+  <symbol id="i-dark" viewBox="0 0 16 16"><path d="M13.5 9.8A6 6 0 0 1 6.2 2.5a6 6 0 1 0 7.3 7.3z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+</svg>
+
+<div class="wrap">
+  <header class="head">
+    <div>
+      <h1 id="title">Loading…</h1>
+      <span class="branch" id="branch"></span>
+    </div>
+    <div class="themes" id="themes" role="group" aria-label="Theme">
+      <button type="button" data-theme="system" aria-label="System theme" title="System"><svg><use href="#i-system"/></svg></button>
+      <button type="button" data-theme="light" aria-label="Light theme" title="Light"><svg><use href="#i-light"/></svg></button>
+      <button type="button" data-theme="dark" aria-label="Dark theme" title="Dark"><svg><use href="#i-dark"/></svg></button>
+    </div>
+  </header>
+
+  <p class="message" id="message" hidden></p>
+
+  <article class="card" id="card" hidden>
+    <div class="tabs" role="tablist" aria-label="View">
+      <button type="button" role="tab" id="tab-map" data-tab="map" aria-controls="panel-map">Repo map</button>
+      <button type="button" role="tab" id="tab-calls" data-tab="calls" aria-controls="panel-calls">Call graph</button>
+    </div>
+
+    <section class="panel" role="tabpanel" id="panel-map" aria-labelledby="tab-map">
+      <div class="map" id="map"></div>
+    </section>
+
+    <section class="panel" role="tabpanel" id="panel-calls" aria-labelledby="tab-calls" hidden>
+      <div class="graph-scroll"><div class="graph" id="graph"></div></div>
+    </section>
+
+    <div class="strip" id="strip" aria-live="polite"><span class="hint">Select a function to mark it reviewed</span></div>
+  </article>
+</div>
+
+<script>
+  // Brief data shape: { repo, title, head, base, root }.
+  // A folder is { name, color, files, dirs, more? }. Briefs from before every folder was listed may hold
+  // { name, color, collapsed: true, count } for folders where nothing changed.
+  // File state: "changed" | "new" | "same" | "skip". Changed files list fns; a changed file with no fns is reviewed as a whole.
+  // Function kind: fn | case (test) | route | dep; state: "new" | "changed".
+  // calls: ids ("path#name") of touched functions this one calls. spot: number shown on the file or function.
+  // Theme: system (no attribute on <html>), light or dark; an explicit pick is remembered in this browser
+  (function () {
+    var buttons = document.querySelectorAll("#themes button");
+    function apply(t) {
+      if (t) document.documentElement.dataset.theme = t;
+      else delete document.documentElement.dataset.theme;
+      buttons.forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.theme === (t || "system"))); });
+    }
+    apply(document.documentElement.dataset.theme);
+    buttons.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var t = b.dataset.theme === "system" ? null : b.dataset.theme;
+        apply(t);
+        try { if (t) localStorage.setItem("glance-theme", t); else localStorage.removeItem("glance-theme"); } catch (e) {}
+      });
+    });
+  })();
+
+  var marks = ["", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"];
+  var kindIcon = { fn: "fn", case: "case", route: "route", dep: "dep" };
+
+  function sourceFor(id) {
+    return "/demo.json";
+  }
+
+  function showMessage(title, text) {
+    document.getElementById("title").textContent = title;
+    var m = document.getElementById("message");
+    m.textContent = text;
+    m.hidden = false;
+  }
+
+  var id = "sample";
+  if (!id) {
+    showMessage("Brief not found", "This link doesn't point to a brief. Check that you copied the whole link from the pull request.");
+  } else {
+    fetch(sourceFor(id))
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (data) { render(id, data); })
+      .catch(function () {
+        showMessage("Brief not found", "This brief may have expired or been removed. Ask for a new link on the pull request.");
+      });
+  }
+
+  function render(briefId, data) {
+    document.title = data.title + " · Glance";
+    document.getElementById("title").textContent = data.title;
+    document.getElementById("branch").textContent = data.head + " → " + data.base;
+    document.getElementById("card").hidden = false;
+
+    var storeKey = "glance-done-" + briefId;
+    var done = {};
+    try { done = JSON.parse(localStorage.getItem(storeKey) || "{}"); } catch (e) {}
+    var strip = document.getElementById("strip");
+    var chips = {};      // review id -> chips showing it
+    var fileEls = {};    // file path -> boxes/chips showing it
+    var files = [];      // changed files with functions, for the done roll-up
+
+    function esc(s) {
+      return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; });
+    }
+    function icon(name, color) {
+      return '<svg class="ico"' + (color ? ' style="color:' + esc(color) + '"' : "") + '><use href="#i-' + esc(name) + '"/></svg>';
+    }
+    function dirLabel(name, color) {
+      return '<span class="dir">' + icon("dir", color) + esc(name) + "/</span>";
+    }
+    function badge(x) {
+      return x.spot ? '<span class="badge' + (x.stray ? " stray" : "") + '">' + (marks[x.spot] || x.spot) + "</span>" : "";
+    }
+    function newDot(x) { return x.state === "new" ? '<span class="new" title="new"></span>' : ""; }
+    function fileHead(f) { return icon(f.icon) + esc(f.name) + newDot(f) + badge(f); }
+    function join(prefix, name) { return prefix ? prefix + "/" + name : name; }
+    function reviewable(f) { return f.state === "changed" || f.state === "new"; }
+    function el(tag, cls, html) {
+      var e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (html) e.innerHTML = html;
+      return e;
+    }
+    function touched(dir) {
+      return !dir.collapsed && ((dir.files || []).some(function (f) { return f.state !== "same"; }) || (dir.dirs || []).some(touched));
+    }
+    function remember(rid, node) { (chips[rid] = chips[rid] || []).push(node); }
+    function track(path, node) { (fileEls[path] = fileEls[path] || []).push(node); }
+
+    // A function chip, or a whole-file chip for changed files without functions.
+    function unitChip(rid, label, item, path) {
+      var b = el("button", label ? "fn" : "file solo", label || fileHead(item));
+      b.type = "button";
+      remember(rid, b);
+      b.addEventListener("click", function () { select(rid, item, label ? path + " · " + item.name : path); });
+      return b;
+    }
+    function fnChip(fn, path) {
+      return unitChip(path + "#" + fn.name, icon(kindIcon[fn.kind || "fn"]) + esc(fn.name) + newDot(fn) + badge(fn), fn, path);
+    }
+
+    function fileNode(f, path) {
+      if (reviewable(f) && f.fns && f.fns.length) {
+        files.push({ path: path, f: f });
+        var box = el("div", "fbox", '<span class="fhead">' + fileHead(f) + '</span><span class="fns"></span>');
+        f.fns.forEach(function (fn) { box.lastChild.appendChild(fnChip(fn, path)); });
+        track(path, box);
+        return box;
+      }
+      if (reviewable(f)) return unitChip(path, null, f, path);
+      if (f.state === "skip") {
+        var s = el("button", "file skip", fileHead(f));
+        s.type = "button";
+        s.addEventListener("click", function () { selectSkipped(path, s); });
+        return s;
+      }
+      return el("span", "file same", fileHead(f));
+    }
+    function folded(dir) {
+      return el("span", "folded", icon("dir", dir.color) + esc(dir.name) + '/ <span class="count">' + dir.count + "</span>");
+    }
+    // Files first, then sub-folders as nested boxes.
+    function fillDir(holder, dir, prefix) {
+      (dir.files || []).forEach(function (f) { holder.appendChild(fileNode(f, join(prefix, f.name))); });
+      if (dir.more) holder.appendChild(el("span", "more", "+" + dir.more + " more"));
+      (dir.dirs || []).forEach(function (sub) {
+        if (sub.collapsed) return holder.appendChild(folded(sub));
+        var box = el("div", touched(sub) ? "group" : "group quiet", dirLabel(sub.name, sub.color));
+        var inner = el("div", "files");
+        box.appendChild(inner);
+        fillDir(inner, sub, join(prefix, sub.name));
+        holder.appendChild(box);
+      });
+    }
+
+    // Repo map: the whole repo, down to touched functions
+    var map = document.getElementById("map");
+    var root = data.root;
+    function mapRow(label, fill, quiet) {
+      var row = el("div", quiet ? "row quiet" : "row", label);
+      var groups = el("div", "groups");
+      fill(groups);
+      row.appendChild(groups);
+      map.appendChild(row);
+    }
+    (root.dirs || []).forEach(function (top) {
+      mapRow(dirLabel(top.name, top.color), function (holder) {
+        if (top.collapsed) holder.appendChild(el("span", "more", top.count + " files"));
+        else fillDir(holder, top, top.name);
+      }, !touched(top));
+    });
+    if ((root.files || []).length) {
+      mapRow('<span class="dir">root</span>', function (holder) { fillDir(holder, { files: root.files }, ""); });
+    }
+
+    // Call graph: only paths that lead to touched files, from their common parent
+    var GAP = 34, ROW = 36;
+    function affected(dir, prefix, depth) {
+      var fileKids = [], dirKids = [];
+      (dir.files || []).forEach(function (f) {
+        if (!reviewable(f)) return;
+        var path = join(prefix, f.name);
+        fileKids.push({ file: f, path: path, kids: (f.fns || []).map(function (fn) { return { fn: fn, path: path, id: path + "#" + fn.name }; }) });
+      });
+      (dir.dirs || []).forEach(function (sub) {
+        if (sub.collapsed) return;
+        var child = affected(sub, join(prefix, sub.name), depth + 1);
+        if (child.kids.length) dirKids.push(child);
+      });
+      // Same order as the minimap: root files come last, inside folders files come first.
+      var kids = depth === 0 ? dirKids.concat(fileKids) : fileKids.concat(dirKids);
+      return { name: dir.name, color: dir.color || "#78909c", depth: depth, kids: kids };
+    }
+    var tree = affected({ name: data.repo, files: root.files, dirs: root.dirs }, "", 0);
+    var maxDir = 0;
+    (function deepest(n) { if (!n.file && !n.fn) { maxDir = Math.max(maxDir, n.depth); n.kids.forEach(deepest); } })(tree);
+    var FILE_DEPTH = maxDir + 1, FN_DEPTH = maxDir + 2;
+
+    var graph = document.getElementById("graph");
+    var nodes = [], links = [], byId = {}, rows = 0;
+    (function place(n, parent) {
+      if (n.fn || (n.file && !n.kids.length)) {
+        n.depth = n.fn ? FN_DEPTH : FILE_DEPTH;
+        n.row = rows++;
+        if (n.fn) byId[n.id] = n;
+      } else {
+        var first = rows;
+        n.kids.forEach(function (k) { place(k, n); });
+        if (n.file) n.depth = FILE_DEPTH;
+        n.row = (first + rows - 1) / 2;
+      }
+      nodes.push(n);
+      if (parent) links.push([parent, n]);
+    })(tree, null);
+
+    nodes.forEach(function (n) {
+      var e;
+      if (n.fn) {
+        e = fnChip(n.fn, n.path);
+        hoverFocus(e, graph, n.id);
+      } else if (n.file && !n.kids.length) {
+        e = unitChip(n.path, null, n.file, n.path);
+      } else if (n.file) {
+        e = el("span", "file", fileHead(n.file));
+        track(n.path, e);
+      } else {
+        e = el("span", null, dirLabel(n.name, n.color)).firstChild;
+      }
+      e.classList.add("node");
+      e.style.top = n.row * ROW + ROW / 2 + "px";
+      graph.appendChild(e);
+      n.el = e;
+    });
+
+    var NS = "http://www.w3.org/2000/svg";
+    function draw() {
+      var old = graph.querySelector("svg.links");
+      if (old) old.remove();
+      // Each column starts after the widest label in the column before it
+      var colW = [], colX = [0];
+      nodes.forEach(function (n) { colW[n.depth] = Math.max(colW[n.depth] || 0, n.el.offsetWidth); });
+      for (var d = 1; d <= FN_DEPTH; d++) colX[d] = colX[d - 1] + (colW[d - 1] || 0) + GAP;
+      nodes.forEach(function (n) { n.el.style.left = colX[n.depth] + "px"; });
+
+      var svg = document.createElementNS(NS, "svg");
+      svg.setAttribute("class", "links");
+      svg.innerHTML = '<defs><marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path class="arrow" d="M0,0 L8,4 L0,8 z"/></marker></defs>';
+      function right(n) { return n.el.offsetLeft + n.el.offsetWidth; }
+      function cy(n) { return n.row * ROW + ROW / 2; }
+      function path(d, cls, a, b) {
+        var p = document.createElementNS(NS, "path");
+        p.setAttribute("d", d); p.setAttribute("class", cls);
+        if (a) { p.setAttribute("marker-end", "url(#ah)"); p.dataset.a = a; p.dataset.b = b; }
+        svg.appendChild(p);
+      }
+      links.forEach(function (l) {
+        var x1 = right(l[0]) + 4, y1 = cy(l[0]), x2 = l[1].el.offsetLeft - 4, y2 = cy(l[1]), m = (x1 + x2) / 2;
+        path("M" + x1 + " " + y1 + " C" + m + " " + y1 + " " + m + " " + y2 + " " + x2 + " " + y2, "tree");
+      });
+      var width = 0;
+      nodes.forEach(function (n) {
+        if (!n.fn && !n.file) return;
+        width = Math.max(width, right(n));
+        if (!n.fn) return;
+        (n.fn.calls || []).forEach(function (to) {
+          var t = byId[to];
+          if (!t) return;
+          var xs = right(n) + 4, ys = cy(n), xt = right(t) + 5, yt = cy(t);
+          var bulge = 22 + 9 * Math.abs(n.row - t.row);
+          width = Math.max(width, Math.max(xs, xt) + bulge);
+          path("M" + xs + " " + ys + " C" + (xs + bulge) + " " + ys + " " + (xt + bulge) + " " + yt + " " + xt + " " + yt,
+            "call" + (n.fn.kind === "case" ? " t" : ""), n.id, to);
+        });
+      });
+      graph.style.width = width + 16 + "px";
+      graph.style.height = rows * ROW + "px";
+      graph.insertBefore(svg, graph.firstChild);
+      // In the docs pane the graph is wider than the frame: start on the functions and their calls.
+      if (params.has("embed")) graph.parentNode.scrollLeft = graph.parentNode.scrollWidth;
+    }
+    function hoverFocus(e, box, fid) {
+      e.addEventListener("mouseenter", function () { focusCalls(box, fid); });
+      e.addEventListener("mouseleave", function () { focusCalls(box, null); });
+      e.addEventListener("focus", function () { focusCalls(box, fid); });
+      e.addEventListener("blur", function () { focusCalls(box, null); });
+    }
+
+    // Tabs: one view at a time. The graphs measure their chips, so each is drawn when its tab is shown.
+    var drawers = { calls: draw };
+    var tabs = [].slice.call(document.querySelectorAll('[role="tab"]'));
+    var current;
+    function showTab(name) {
+      current = name;
+      tabs.forEach(function (t) {
+        var on = t.dataset.tab === name;
+        t.setAttribute("aria-selected", String(on));
+        t.tabIndex = on ? 0 : -1;
+        document.getElementById("panel-" + t.dataset.tab).hidden = !on;
+      });
+      if (drawers[name]) drawers[name]();
+      if (params.has("embed")) return; // the docs page shouldn't change which tab your own briefs open on
+      try { localStorage.setItem("glance-tab", name); } catch (e) {}
+    }
+    tabs.forEach(function (t, i) {
+      t.addEventListener("click", function () { showTab(t.dataset.tab); });
+      t.addEventListener("keydown", function (e) {
+        var step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        if (!step) return;
+        var next = tabs[(i + step + tabs.length) % tabs.length];
+        next.focus();
+        showTab(next.dataset.tab);
+      });
+    });
+    var saved = params.get("tab");
+    if (!saved) try { saved = localStorage.getItem("glance-tab"); } catch (e) {}
+    showTab(tabs.some(function (t) { return t.dataset.tab === saved; }) ? saved : "map");
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (drawers[current]) drawers[current](); });
+
+    function focusCalls(box, fid) {
+      box.classList.toggle("focus", !!fid);
+      box.querySelectorAll(".call").forEach(function (p) {
+        p.classList.toggle("hot", !!fid && (p.dataset.a === fid || p.dataset.b === fid));
+      });
+    }
+
+    function refreshDone() {
+      Object.keys(chips).forEach(function (rid) {
+        chips[rid].forEach(function (c) { c.classList.toggle("done", !!done[rid]); });
+      });
+      files.forEach(function (x) {
+        var all = x.f.fns.every(function (fn) { return done[x.path + "#" + fn.name]; });
+        fileEls[x.path].forEach(function (e) { e.classList.toggle("done", all); });
+      });
+    }
+    refreshDone();
+
+    function clearSel() {
+      document.querySelectorAll(".sel").forEach(function (c) { c.classList.remove("sel"); });
+    }
+    function selectSkipped(path, chip) {
+      clearSel();
+      chip.classList.add("sel");
+      strip.innerHTML = "<code>" + esc(path) + '</code><span class="hint">skipped by rule</span>';
+    }
+    function select(rid, item, label) {
+      clearSel();
+      chips[rid].forEach(function (c) { c.classList.add("sel"); });
+      strip.innerHTML = badge(item) + "<code>" + esc(label) + "</code>" +
+        '<button type="button" id="mark">' + (done[rid] ? "Unmark" : "Mark reviewed") + "</button>";
+      document.getElementById("mark").addEventListener("click", function () {
+        done[rid] = !done[rid];
+        refreshDone();
+        this.textContent = done[rid] ? "Unmark" : "Mark reviewed";
+        try { localStorage.setItem(storeKey, JSON.stringify(done)); } catch (e) {}
+      });
+    }
+  }
+</script>
+</body>
+</html>

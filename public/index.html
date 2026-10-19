@@ -3,24 +3,919 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="robots" content="noindex, nofollow">
-<link rel="icon" href="data:,">
 <title>Glance</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;600;700&display=swap">
+<meta name="description" content="Glance turns a branch into a review map: where the changes sit in the codebase, and how the changed functions call each other.">
+<meta property="og:title" content="Glance">
+<meta property="og:description" content="A map of a pull request: where the changes sit, and how the changed functions connect.">
+<meta property="og:url" content="https://glance.nishilfaldu.site">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23171717'/%3E%3Cpath d='M10 10l12 6-12 6' fill='none' stroke='%23fff' stroke-width='2'/%3E%3Ccircle cx='10' cy='10' r='3' fill='%23fff'/%3E%3Ccircle cx='22' cy='16' r='3' fill='%23fff'/%3E%3Ccircle cx='10' cy='22' r='3' fill='%23fff'/%3E%3C/svg%3E">
+<script>try { var t = localStorage.getItem("glance-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
 <style>
-  :root { --bg: #f6f7f9; --fg: #1d232b; --muted: #6b7480; --accent: #2b6cb0; color-scheme: light; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #14171c; --fg: #e3e7ed; --muted: #97a0ad; --accent: #79b0ef; color-scheme: dark } }
-  body { margin: 0; min-height: 100vh; display: grid; place-content: center; gap: 8px; text-align: center;
-    background: var(--bg); color: var(--fg); font: 15px/1.5 "Instrument Sans", system-ui, sans-serif;
-    padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); }
-  h1 { margin: 0; font-size: 28px; }
-  p { margin: 0; color: var(--muted); }
-  a { color: var(--accent); }
+  /* Same tokens as the viewer, plus diff lines. The two dark blocks must stay identical. */
+  :root {
+    --bg: #ffffff; --surface: #ffffff; --fg: #171717; --muted: #666666; --faint: #a8a8a8;
+    --line: #ebebeb; --chip: #f5f5f5; --risk: #a35200; --risk-bg: #fff4e5;
+    --stray: #0068d6; --stray-bg: #e9f4ff; --new: #107d32; --accent: #171717;
+    --add-bg: #ebf7ee; --del: #c4321f; --del-bg: #fdeeec; --unit: #8e5cc0; --top: rgba(255,255,255,.82);
+    --sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #000000; --surface: #0a0a0a; --fg: #ededed; --muted: #a1a1a1; --faint: #575757;
+    --line: #262626; --chip: #1a1a1a; --risk: #f5a524; --risk-bg: #261a06;
+    --stray: #52a8ff; --stray-bg: #0d1a2b; --new: #45d483; --accent: #ededed;
+    --add-bg: #0b2114; --del: #ff6b5a; --del-bg: #2a0f0c; --unit: #c39bea; --top: rgba(0,0,0,.78); color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #000000; --surface: #0a0a0a; --fg: #ededed; --muted: #a1a1a1; --faint: #575757;
+    --line: #262626; --chip: #1a1a1a; --risk: #f5a524; --risk-bg: #261a06;
+    --stray: #52a8ff; --stray-bg: #0d1a2b; --new: #45d483; --accent: #ededed;
+    --add-bg: #0b2114; --del: #ff6b5a; --del-bg: #2a0f0c; --unit: #c39bea; --top: rgba(0,0,0,.78); color-scheme: dark }
+
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 88px; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15.5px/1.65 var(--sans); -webkit-font-smoothing: antialiased; }
+  a { color: var(--fg); text-underline-offset: 3px; text-decoration-color: var(--faint); }
+  a:hover { text-decoration-color: var(--fg); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  code, kbd { font: 0.88em var(--mono); }
+  p code, li code, td code { background: var(--chip); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; white-space: nowrap; }
+  ::selection { background: var(--fg); color: var(--bg); }
+
+  /* Top bar */
+  .top { position: sticky; top: 0; z-index: 20; background: var(--top); backdrop-filter: saturate(1.4) blur(10px); -webkit-backdrop-filter: saturate(1.4) blur(10px);
+    border-bottom: 1px solid var(--line); }
+  .top-in { max-width: 1440px; margin: 0 auto; height: 56px; display: flex; align-items: center; gap: 20px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 600; letter-spacing: -0.01em; text-decoration: none; }
+  .brand svg { width: 22px; height: 22px; }
+  .top nav { margin-left: auto; display: flex; align-items: center; gap: 18px; font-size: 14px; }
+  .top nav a { color: var(--muted); text-decoration: none; }
+  .top nav a:hover { color: var(--fg); }
+  .themes { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 999px; flex: none; }
+  .themes button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 999px;
+    background: none; color: var(--muted); cursor: pointer; }
+  .themes button:hover { color: var(--fg); }
+  .themes button[aria-pressed="true"] { background: var(--chip); color: var(--fg); }
+  .themes svg { width: 14px; height: 14px; }
+  @media (max-width: 560px) { .top nav .hide-sm { display: none; } }
+
+  /* Layout: prose on the left, a sticky preview on the right that follows the section you're reading */
+  .layout { max-width: 1440px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr);
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .toc, .pane-col { display: none; }
+  main { min-width: 0; max-width: 620px; width: 100%; margin: 0 auto; padding: 56px 0 120px; }
+  @media (min-width: 1080px) {
+    .layout { grid-template-columns: minmax(0, 560px) minmax(0, 1fr); column-gap: 56px; padding-inline: 40px; }
+    main { margin: 0; padding-top: 72px; }
+    .pane-col { display: block; }
+  }
+  @media (min-width: 1380px) {
+    .layout { grid-template-columns: 150px minmax(0, 560px) minmax(0, 1fr); }
+    .toc { display: block; }
+  }
+  .pane { position: sticky; top: 80px; height: calc(100vh - 104px); min-height: 480px; }
+
+  .toc ol { position: sticky; top: 104px; list-style: none; margin: 0; padding: 0 0 0 12px; border-left: 1px solid var(--line); font-size: 13.5px; }
+  .toc li { margin: 0; }
+  .toc a { display: block; padding: 4px 0; color: var(--muted); text-decoration: none; position: relative; }
+  .toc a:hover { color: var(--fg); }
+  .toc a[aria-current="true"] { color: var(--fg); font-weight: 500; }
+  .toc a[aria-current="true"]::before { content: ""; position: absolute; left: -13px; top: 6px; bottom: 6px; width: 1px; background: var(--fg); }
+
+  /* Prose */
+  .eyebrow { display: inline-flex; align-items: center; gap: 8px; font: 500 12.5px var(--mono); color: var(--muted);
+    border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px 3px 8px; }
+  .eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--new); }
+  h1 { font-size: clamp(38px, 6vw, 56px); line-height: 1.04; letter-spacing: -0.045em; font-weight: 600; margin: 20px 0 20px; text-wrap: balance; }
+  .lede { font-size: 18px; line-height: 1.55; color: var(--muted); margin: 0 0 28px; text-wrap: pretty; }
+  .lede strong { color: var(--fg); font-weight: 500; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0 0; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 6px; font: 500 14px var(--sans);
+    text-decoration: none; border: 1px solid var(--line); color: var(--fg); background: var(--surface); }
+  .btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .btn:hover { border-color: var(--faint); }
+  .btn.primary:hover { opacity: .88; }
+
+  .step { padding-top: 8px; }
+  .step + .step { margin-top: 40px; }
+  .step.h2 { margin-top: 88px; }
+  .step.h2:first-of-type { margin-top: 64px; }
+  h2 { font-size: 28px; line-height: 1.2; letter-spacing: -0.03em; font-weight: 600; margin: 0 0 14px; }
+  h3 { font-size: 18px; line-height: 1.3; letter-spacing: -0.015em; font-weight: 600; margin: 0 0 10px; }
+  .kicker { font: 500 12.5px var(--mono); color: var(--faint); margin: 0 0 8px; display: block; }
+  main p { margin: 0 0 14px; text-wrap: pretty; }
+  main ul { margin: 0 0 14px; padding-left: 20px; }
+  main li { margin: 4px 0; }
+  main li::marker { color: var(--faint); }
+  .note { font-size: 14px; color: var(--muted); }
+
+  /* Command block with copy button */
+  .cmd { position: relative; margin: 0 0 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--chip); }
+  .cmd pre { margin: 0; padding: 12px 52px 12px 14px; font: 13px/1.7 var(--mono); overflow-x: auto; }
+  .cmd .p { color: var(--faint); user-select: none; }
+  .copy { position: absolute; top: 7px; right: 7px; width: 30px; height: 30px; display: grid; place-items: center; padding: 0;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); cursor: pointer; }
+  .copy:hover { color: var(--fg); }
+  .copy svg { width: 14px; height: 14px; }
+  .copy[data-done] { color: var(--new); }
+
+  /* Reference tables */
+  table { width: 100%; border-collapse: collapse; margin: 4px 0 18px; font-size: 14px; }
+  th { text-align: left; font-weight: 500; color: var(--muted); font-size: 13px; }
+  th, td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { white-space: nowrap; padding-right: 16px; }
+  td code { white-space: nowrap; }
+
+  footer { margin-top: 96px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 8px 20px; }
+  footer a { color: var(--muted); }
+
+  /* Previews: inline under their section on narrow screens, stacked in the sticky pane on wide ones */
+  .pv { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden;
+    display: flex; flex-direction: column; margin: 22px 0 6px; }
+  .pane .pv { position: absolute; inset: 0; margin: 0; opacity: 0; transform: translateY(8px); pointer-events: none; visibility: hidden;
+    transition: opacity .3s ease, transform .3s ease, visibility 0s linear .3s; box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 12px 32px -12px rgba(0,0,0,.08); }
+  .pane .pv.on { opacity: 1; transform: none; pointer-events: auto; visibility: visible; transition: opacity .3s ease, transform .3s ease, visibility 0s; }
+  @media (prefers-reduced-motion: reduce) { .pane .pv, .pane .pv.on { transition: none; transform: none; } }
+  .pv-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 13px; flex: none; }
+  .pv-head .t { font: 500 12.5px var(--mono); }
+  .pv-head .d { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .pv-head .live { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font: 500 11.5px var(--mono); color: var(--new); flex: none; }
+  .pv-head .live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 20%, transparent); }
+  .pv-head a.live { text-decoration: none; }
+  .pv-body { flex: 1; min-height: 0; overflow: auto; padding: 22px; }
+  .pv-body.frame { padding: 0; overflow: hidden; }
+  .pv-body.center { display: grid; align-content: center; }
+  .pv iframe { display: block; width: 100%; height: 600px; border: 0; background: transparent; }
+  .pane .pv iframe { height: 100%; }
+  .pv-cap { font-size: 13px; color: var(--muted); margin: 14px 0 0; }
+
+  /* Chips, as the viewer draws them */
+  .file, .fn, .dir, .folded { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .file { font: 12.5px var(--mono); padding: 3px 7px; border-radius: 5px; border: 1px solid transparent; background: var(--chip); color: var(--fg); }
+  .file.skip { background: none; border: 1px dashed var(--line); color: var(--faint); }
+  .fn { font: 11.5px var(--mono); padding: 2px 7px; border-radius: 5px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); position: relative; z-index: 1; }
+  .fn.ghost { border-style: dashed; color: var(--faint); background: var(--bg); }
+  .dir { font: 500 12.5px var(--mono); color: var(--muted); }
+  .new { width: 6px; height: 6px; border-radius: 50%; background: var(--new); flex: none; }
+  .badge { font: 600 11px var(--mono); padding: 0 4px; border-radius: 4px; color: var(--risk); background: var(--risk-bg); }
+  .badge.stray { color: var(--stray); background: var(--stray-bg); }
+  .ico { width: 16px; height: 16px; flex: none; }
+  .fn .ico { width: 14px; height: 14px; }
+  .fbox { display: inline-flex; flex-direction: column; gap: 5px; padding: 5px 8px 7px; border-radius: 6px; background: var(--chip); }
+  .fbox .fhead { display: inline-flex; align-items: center; gap: 5px; font: 12.5px var(--mono); }
+  .fbox .fns { display: flex; flex-wrap: wrap; gap: 4px; padding-left: 21px; }
+
+  /* Code with diff lines and the function each line falls in */
+  .code { font: 12.5px/1.75 var(--mono); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; background: var(--bg); }
+  .code .fname { display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  .code .lines { padding: 6px 0; min-width: max-content; }
+  .ln { display: grid; grid-template-columns: 34px 16px auto; padding-right: 16px; white-space: pre; }
+  .ln .no { color: var(--faint); text-align: right; padding-right: 10px; user-select: none; }
+  .ln .sg { color: var(--faint); user-select: none; }
+  .ln.add { background: var(--add-bg); }
+  .ln.add .sg { color: var(--new); }
+  .ln.del { background: var(--del-bg); }
+  .ln.del .sg { color: var(--del); }
+  .ln.del .tx { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--del) 50%, transparent); }
+  .unit { position: relative; box-shadow: inset 2px 0 var(--unit); }
+  .unit > .utag { display: block; padding: 2px 0 1px 50px; font-size: 11px; line-height: 1.6; color: var(--unit); }
+  .k { color: #b5307a; } .s { color: #217a3c; } .f { color: #6639ba; } .c { color: var(--faint); } .m { background: color-mix(in srgb, var(--risk) 16%, transparent); border-radius: 3px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--risk) 30%, transparent); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .k { color: #ff7ab8 } :root:not([data-theme="light"]) .s { color: #6fdc8c } :root:not([data-theme="light"]) .f { color: #c7a6ff } }
+  :root[data-theme="dark"] .k { color: #ff7ab8 } :root[data-theme="dark"] .s { color: #6fdc8c } :root[data-theme="dark"] .f { color: #c7a6ff }
+
+  /* Terminal */
+  .term { font: 12.5px/1.8 var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; white-space: pre; }
+  .term .p { color: var(--faint); user-select: none; }
+  .term .o { color: var(--muted); }
+  .term .u { color: var(--fg); text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 3px; }
+  .stack { display: grid; gap: 16px; }
+  .sub { font: 500 12px var(--mono); color: var(--muted); margin: 0 0 8px; display: flex; align-items: center; gap: 6px; }
+
+  /* Pipeline */
+  .pipe { list-style: none; margin: 0; padding: 0; position: relative; }
+  .pipe::before { content: ""; position: absolute; left: 7px; top: 12px; bottom: 12px; width: 1px; background: var(--line); }
+  .pipe li { position: relative; display: grid; grid-template-columns: 16px 170px 1fr; gap: 14px; align-items: baseline; padding: 9px 0; }
+  .pipe li::before { content: ""; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--faint); background: var(--surface); margin-left: 3px; align-self: center; }
+  .pipe li.out::before { background: var(--fg); border-color: var(--fg); }
+  .pipe b { font: 500 12.5px var(--mono); }
+  .pipe span { color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+  @media (max-width: 560px) { .pipe li { grid-template-columns: 16px 1fr; } .pipe span { grid-column: 2; } }
+
+  /* Diagrams drawn from chips: data-edges="a>b" draws an arrow from [data-n=a] to [data-n=b] */
+  .net { position: relative; }
+  .net > svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  .edges path { fill: none; stroke: var(--fg); stroke-width: 1.4; opacity: .65; }
+  .edges path.soft { stroke-dasharray: 3 3; opacity: .45; }
+  .edges marker path { fill: var(--fg); stroke: none; opacity: 1; }
+  .cluster { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 14px; position: relative; }
+  .cluster.island { border-style: dashed; border-color: color-mix(in srgb, var(--stray) 45%, transparent); }
+  .cluster .lbl { font: 500 11.5px var(--mono); color: var(--muted); margin: 0 0 12px; display: block; }
+  .cluster.island .lbl { color: var(--stray); }
+  .grid2 { display: grid; grid-template-columns: max-content max-content; gap: 22px 40px; align-items: center; }
+  .grid2 > * { justify-self: start; }
+  /* Narrow screens: one column, with handleCheckout() off to the right so the arrow down the left stays clear */
+  @media (max-width: 560px) {
+    .grid2 { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+    .grid2 > span:not([data-n]) { display: none; }
+    .grid2 [data-n="route"] { grid-row: 1; } .grid2 [data-n="refresh"] { grid-row: 2; }
+    .grid2 [data-n="checkout"] { grid-row: 3; justify-self: end; } .grid2 [data-n="rotate"] { grid-row: 4; }
+    .grid2 [data-n="create"] { grid-row: 5; } .grid2 [data-n="sign"] { grid-row: 6; }
+    .pv-body { padding: 16px; }
+  }
+  .groups-fig { display: grid; gap: 14px; }
+  .islands { display: flex; flex-wrap: wrap; gap: 14px; }
+  .chain { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 34px; padding: 4px 0; }
+  .trace { font: 12px/1.9 var(--mono); color: var(--muted); margin: 0; padding: 0; list-style: none; }
+  .trace li { display: grid; grid-template-columns: 18px 1fr; }
+  .trace .ok { color: var(--new); }
+  .trace .no { color: var(--faint); }
+  .trace b { color: var(--fg); font-weight: 500; }
+
+  /* Rules */
+  .rules { display: grid; gap: 10px; }
+  .rule { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 8px; }
+  .rule .rh { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 500; }
+  .rule .rh small { margin-left: auto; font: 11.5px var(--mono); color: var(--faint); font-weight: 400; }
+  .rule .ex { font: 12px/1.6 var(--mono); background: var(--chip); border-radius: 5px; padding: 6px 9px; overflow-x: auto; white-space: pre; }
+  .rule p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+  .skips { display: grid; grid-template-columns: max-content 1fr; gap: 10px 16px; align-items: center; font-size: 13.5px; }
+  .skips span:nth-child(even) { color: var(--muted); }
+  .tree { font: 12.5px/1.9 var(--mono); white-space: pre; overflow-x: auto; margin: 0; }
+  .tree .c { color: var(--faint); }
+  .pr { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .pr .prh { padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 14px; font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
+  .pr .prh span { color: var(--muted); font-weight: 400; }
+  .pr pre { margin: 0; padding: 12px 14px; font: 12.5px/1.75 var(--mono); white-space: pre-wrap; word-break: break-all; }
+  .pr .mk { color: var(--faint); }
 </style>
 </head>
 <body>
-  <h1>Glance</h1>
-  <p>Open a review link from a pull request.</p>
-  <p><a href="/r/sample">See an example</a></p>
+
+<!-- Icons, the same ones the viewer uses -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-ts" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#3178c6"/><text x="8.6" y="12.2" font-size="7.2" font-weight="700" font-family="Arial,sans-serif" fill="#fff" text-anchor="middle">TS</text></symbol>
+  <symbol id="i-json" viewBox="0 0 16 16"><text x="8" y="12" font-size="10" font-weight="700" font-family="Menlo,monospace" fill="#d4a017" text-anchor="middle">{}</text></symbol>
+  <symbol id="i-file" viewBox="0 0 16 16"><path d="M4 1.5h5.5L13 5v9.5H4z" fill="none" stroke="#90a4ae" stroke-width="1.3" stroke-linejoin="round"/><path d="M9.5 1.5V5H13" fill="none" stroke="#90a4ae" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-md" viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="10" rx="1.5" fill="none" stroke="#42a5f5" stroke-width="1.3"/><path d="M3.5 10.5v-5l2 2.4 2-2.4v5M11 5.5v5m-1.8-1.8L11 10.5l1.8-1.8" stroke="#42a5f5" stroke-width="1.2" fill="none"/></symbol>
+  <symbol id="i-js" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#f0c419"/><text x="8.6" y="12.2" font-size="7.2" font-weight="700" font-family="Arial,sans-serif" fill="#2b2b2b" text-anchor="middle">JS</text></symbol>
+  <symbol id="i-fn" viewBox="0 0 16 16"><path d="M8 1.5l5.6 3.2v6.6L8 14.5l-5.6-3.2V4.7z" fill="none" stroke="#b180d7" stroke-width="1.4" stroke-linejoin="round"/><path d="M2.6 4.8L8 8l5.4-3.2M8 8v6.3" fill="none" stroke="#b180d7" stroke-width="1.2"/></symbol>
+  <symbol id="i-route" viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="10" rx="2" fill="none" stroke="#e0a030" stroke-width="1.3"/><path d="M5 8h6m-2-2l2 2-2 2" fill="none" stroke="#e0a030" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-case" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.3" fill="none" stroke="#0f9d8a" stroke-width="1.4"/><path d="M5.2 8.2l1.9 1.9 3.8-4" fill="none" stroke="#0f9d8a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-dep" viewBox="0 0 16 16"><path d="M8 1.5l5.6 3.2v6.6L8 14.5l-5.6-3.2V4.7z" fill="#cb3837"/><path d="M2.6 4.8L8 8l5.4-3.2M8 8v6.3" fill="none" stroke="#fff" stroke-width="1.1"/></symbol>
+  <symbol id="i-system" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 14h5M8 11.5V14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+  <symbol id="i-light" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+  <symbol id="i-dark" viewBox="0 0 16 16"><path d="M13.5 9.8A6 6 0 0 1 6.2 2.5a6 6 0 1 0 7.3 7.3z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" fill="none" stroke="currentColor" stroke-width="1.3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-mark" viewBox="0 0 24 24"><path d="M7 6.5l10 5.5-10 5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7" cy="6.5" r="2.6" fill="currentColor"/><circle cx="17" cy="12" r="2.6" fill="currentColor"/><circle cx="7" cy="17.5" r="2.6" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+</svg>
+
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="/"><svg><use href="#i-mark"/></svg>Glance</a>
+    <nav aria-label="Site">
+      <a class="hide-sm" href="#how-it-works">How it works</a>
+      <a class="hide-sm" href="#reference">Reference</a>
+      <a href="/r/sample">Example</a>
+      <div class="themes" id="themes" role="group" aria-label="Theme">
+        <button type="button" data-theme="system" aria-label="System theme" title="System"><svg><use href="#i-system"/></svg></button>
+        <button type="button" data-theme="light" aria-label="Light theme" title="Light"><svg><use href="#i-light"/></svg></button>
+        <button type="button" data-theme="dark" aria-label="Dark theme" title="Dark"><svg><use href="#i-dark"/></svg></button>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="toc" aria-label="On this page">
+    <ol id="toc"></ol>
+  </aside>
+
+  <main>
+    <section class="step" id="top" data-pv="map">
+      <span class="eyebrow"><span class="dot"></span>glance · CLI for TypeScript &amp; JavaScript</span>
+      <h1>See a pull request before you read it.</h1>
+      <p class="lede">Glance turns a branch into a review map: <strong>where</strong> the changes sit in the codebase, and <strong>how</strong> the changed functions call each other. Changes that don't connect to anything stand out on their own.</p>
+      <div class="cmd">
+        <pre><span class="p">$ </span>git clone https://github.com/nishilfaldu/glance
+<span class="p">$ </span>cd glance/cli &amp;&amp; npm install &amp;&amp; npm link</pre>
+        <button class="copy" type="button" data-copy="git clone https://github.com/nishilfaldu/glance&#10;cd glance/cli &amp;&amp; npm install &amp;&amp; npm link" aria-label="Copy install commands"><svg><use href="#i-copy"/></svg></button>
+      </div>
+      <div class="actions">
+        <a class="btn primary" href="/r/sample">Open the example</a>
+        <a class="btn" href="#how-it-works">How it works</a>
+      </div>
+    </section>
+
+    <section class="step h2" id="why" data-pv="map" data-toc="Why">
+      <h2>Why</h2>
+      <p>AI agents write pull requests faster than people can read them. A forty-file PR shows up, GitHub lists the files alphabetically, and you start at the top. Somewhere around file twelve you lose the thread, skim the rest, and merge.</p>
+      <p>The list order is the problem. The change that matters sits between a renamed import and a lockfile, and the one edit that has nothing to do with the task looks like every other file.</p>
+      <p>Glance doesn't review the code for you. It gives you a map, so you can start at the main change, follow its calls, and see the leftovers. A quick review beats no review.</p>
+    </section>
+
+    <section class="step h2" id="views" data-pv="map" data-toc="The two views">
+      <h2>The two views</h2>
+      <p>Each Glance page has two tabs. They show the same chips: one per touched function, with the same numbers on the same flags, so you can switch views without losing your place.</p>
+    </section>
+
+    <section class="step" id="repo-map" data-pv="map">
+      <h3>Repo map</h3>
+      <p>The whole repository on one screen, folder by folder. Unchanged files are grey. Changed files open up to show the functions the branch touched, and the scrolling GitHub sidebar isn't needed.</p>
+      <ul>
+        <li>A <span class="new" style="display:inline-block;vertical-align:middle"></span> green dot marks a new file or function.</li>
+        <li>An orange number marks a flag. A blue number marks code that isn't connected to the main change.</li>
+        <li>Dashed chips are files Glance skipped, like lockfiles and generated code.</li>
+        <li>Folders that only hold one folder fold together, like <code>src/components/ui</code>. After twelve unchanged files, a folder shows <code>+N more</code>.</li>
+      </ul>
+      <p>Click a function and press <em>Mark reviewed</em>. It fades in place, and a file fades once all its functions are done. Marks are stored in your browser only.</p>
+      <figure class="pv" id="pv-map">
+        <div class="pv-head"><span class="t">Repo map</span><span class="d">Rotate sessions across checkout</span><a class="live" href="/r/sample" target="_blank" rel="noopener">live</a></div>
+        <div class="pv-body frame"><iframe data-src="/r/sample?embed&amp;tab=map" title="Glance repo map for the sample pull request" loading="lazy"></iframe></div>
+      </figure>
+    </section>
+
+    <section class="step" id="call-graph" data-pv="calls">
+      <h3>Call graph</h3>
+      <p>Only the paths that lead to changed files, drawn as a tree from their closest common folder. Grey lines are the folder structure. Bold arrows are calls between touched functions.</p>
+      <p>Arrows from test cases are hidden until you hover the test, since one test usually calls into everything. Hover any function to light up its calls and dim the rest.</p>
+      <figure class="pv" id="pv-calls">
+        <div class="pv-head"><span class="t">Call graph</span><span class="d">Hover a function to see its calls</span><a class="live" href="/r/sample" target="_blank" rel="noopener">live</a></div>
+        <div class="pv-body frame"><iframe data-src="/r/sample?embed&amp;tab=calls" title="Glance call graph for the sample pull request" loading="lazy"></iframe></div>
+      </figure>
+    </section>
+
+    <section class="step h2" id="quick-start" data-pv="term" data-toc="Quick start">
+      <h2>Quick start</h2>
+      <p>You need Node 20 or newer. Install the CLI once from a clone:</p>
+      <div class="cmd">
+        <pre><span class="p">$ </span>cd glance/cli &amp;&amp; npm install &amp;&amp; npm link</pre>
+        <button class="copy" type="button" data-copy="cd glance/cli &amp;&amp; npm install &amp;&amp; npm link" aria-label="Copy"><svg><use href="#i-copy"/></svg></button>
+      </div>
+      <p>Then, in any repo, check out the branch you want to review and run <code>glance</code>. It compares the branch with the repo's default branch and opens the page in your browser. The page is served from <code>127.0.0.1</code> and nothing is uploaded.</p>
+      <div class="cmd">
+        <pre><span class="p">$ </span>glance</pre>
+        <button class="copy" type="button" data-copy="glance" aria-label="Copy"><svg><use href="#i-copy"/></svg></button>
+      </div>
+      <p>Reviewing your own work before you commit it? <code>glance --working</code> includes staged, unstaged and untracked changes.</p>
+      <figure class="pv" id="pv-term">
+        <div class="pv-head"><span class="t">Terminal</span><span class="d">Reviewing a branch locally</span></div>
+        <div class="pv-body center">
+          <div class="term"><span class="p">~/storefront $ </span>git switch feature/session-rotation
+<span class="p">~/storefront $ </span>glance
+<span class="o">feature/session-rotation → main: 11 files, 14 functions, 5 flagged</span>
+<span class="o">Review page: </span><span class="u">http://127.0.0.1:53817/r/local</span><span class="o">  (Ctrl+C to stop)</span></div>
+          <p class="pv-cap">The summary line counts changed files (skipped ones included), touched functions, and flags.</p>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step h2" id="how-it-works" data-pv="pipe" data-toc="How it works">
+      <h2>How it works</h2>
+      <p>Glance is deterministic. There's no model in the loop: the same branch gives the same map every time. It reads git and parses your code with the TypeScript compiler, and every flag comes from a rule you can read.</p>
+      <p>The steps are on the right. The sections below go through them one at a time, using the sample pull request: <em>Rotate sessions across checkout</em>, in a small storefront app.</p>
+      <figure class="pv" id="pv-pipe">
+        <div class="pv-head"><span class="t">Pipeline</span><span class="d">From a branch to a brief</span></div>
+        <div class="pv-body center">
+          <ol class="pipe">
+            <li><b>git merge-base</b><span>Find the commit where the branch left main.</span></li>
+            <li><b>git diff</b><span>Added and removed lines, file by file.</span></li>
+            <li><b>skip rules</b><span>Drop lockfiles, bundles and generated code.</span></li>
+            <li><b>TypeScript parser</b><span>Functions, imports, calls and catch blocks in each changed file.</span></li>
+            <li><b>lines → functions</b><span>Each changed line belongs to the innermost function around it.</span></li>
+            <li><b>imports → calls</b><span>Follow each call to the function it lands on.</span></li>
+            <li><b>groups</b><span>The largest group of connected functions is the main change.</span></li>
+            <li><b>rules</b><span>Number what the rules find, top to bottom.</span></li>
+            <li class="out"><b>brief.json</b><span>Names, states, calls and flags. No source code.</span></li>
+          </ol>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="touched" data-pv="units">
+      <span class="kicker">01</span>
+      <h3>Finding the touched functions</h3>
+      <p>Glance diffs the branch against its merge base with the default branch, so commits that landed on main in the meantime don't show up as changes.</p>
+      <p>Each changed file is parsed into <em>units</em>, the pieces a reviewer reads as one thing:</p>
+      <ul>
+        <li>function declarations, and arrow or function expressions assigned to a name</li>
+        <li>class methods, shown as <code>Class.method()</code></li>
+        <li>route handlers keyed by an HTTP method and path, like <code>"POST /session/refresh"</code></li>
+        <li>test cases: <code>it("…")</code> and <code>test("…")</code> with a callback</li>
+      </ul>
+      <p>Every added line, and the spot where every removed line used to be, is assigned to the innermost unit that contains it. Those units are the touched functions. A unit whose name didn't exist in the base version of the file is marked new.</p>
+      <p>Lines outside any function, like a top-level constant, belong to the file. If a rule flags one of them, the number goes on the file chip.</p>
+      <figure class="pv" id="pv-units">
+        <div class="pv-head"><span class="t">src/auth/session.ts</span><span class="d">Changed lines and the unit each one falls inside</span></div>
+        <div class="pv-body">
+          <div class="stack">
+            <div class="code"><div class="lines">
+<div class="ln"><span class="no">1</span><span class="sg"> </span><span class="tx"><span class="k">import</span> { SignJWT } <span class="k">from</span> <span class="s">"jose"</span>;</span></div>
+<div class="ln"><span class="no">2</span><span class="sg"> </span><span class="tx"><span class="k">import</span> { db } <span class="k">from</span> <span class="s">"../db"</span>;</span></div>
+<div class="ln"><span class="no">3</span><span class="sg"> </span><span class="tx"></span></div>
+<div class="ln add"><span class="no">4</span><span class="sg">+</span><span class="tx"><span class="k">const</span> SECRET = <span class="m">process.env.SESSION_SECRET ?? <span class="s">"dev-secret"</span></span>;</span></div>
+<div class="ln add"><span class="no">5</span><span class="sg">+</span><span class="tx"><span class="k">const</span> key = <span class="k">new</span> TextEncoder().encode(SECRET);</span></div>
+<div class="ln"><span class="no">6</span><span class="sg"> </span><span class="tx"></span></div>
+<div class="unit"><span class="utag">signToken() · new</span>
+<div class="ln add"><span class="no">7</span><span class="sg">+</span><span class="tx"><span class="k">async function</span> <span class="f">signToken</span>(userId: string) {</span></div>
+<div class="ln add"><span class="no">8</span><span class="sg">+</span><span class="tx">  <span class="k">return new</span> <span class="f">SignJWT</span>({ sub: userId })</span></div>
+<div class="ln add"><span class="no">9</span><span class="sg">+</span><span class="tx">    .setExpirationTime(<span class="s">"15m"</span>).sign(key);</span></div>
+<div class="ln add"><span class="no">10</span><span class="sg">+</span><span class="tx">}</span></div>
+</div>
+<div class="ln"><span class="no">11</span><span class="sg"> </span><span class="tx"></span></div>
+<div class="unit"><span class="utag">createSession() · changed</span>
+<div class="ln"><span class="no">12</span><span class="sg"> </span><span class="tx"><span class="k">export async function</span> <span class="f">createSession</span>(userId: string) {</span></div>
+<div class="ln del"><span class="no"></span><span class="sg">−</span><span class="tx">  <span class="k">const</span> token = crypto.randomUUID();</span></div>
+<div class="ln add"><span class="no">13</span><span class="sg">+</span><span class="tx">  <span class="k">const</span> token = <span class="k">await</span> <span class="f">signToken</span>(userId);</span></div>
+<div class="ln"><span class="no">14</span><span class="sg"> </span><span class="tx">  <span class="k">await</span> db.sessions.insert({ userId, token });</span></div>
+<div class="ln"><span class="no">15</span><span class="sg"> </span><span class="tx">  <span class="k">return</span> token;</span></div>
+<div class="ln"><span class="no">16</span><span class="sg"> </span><span class="tx">}</span></div>
+</div>
+<div class="ln"><span class="no">17</span><span class="sg"> </span><span class="tx"></span></div>
+<div class="unit"><span class="utag">rotateSession() · new</span>
+<div class="ln add"><span class="no">18</span><span class="sg">+</span><span class="tx"><span class="k">export async function</span> <span class="f">rotateSession</span>(oldToken: string) {</span></div>
+<div class="ln add"><span class="no">19</span><span class="sg">+</span><span class="tx">  <span class="k">const</span> old = <span class="k">await</span> db.sessions.take(oldToken);</span></div>
+<div class="ln add"><span class="no">20</span><span class="sg">+</span><span class="tx">  <span class="k">if</span> (!old) <span class="k">return</span> null;</span></div>
+<div class="ln add"><span class="no">21</span><span class="sg">+</span><span class="tx">  <span class="k">return</span> <span class="f">createSession</span>(old.userId);</span></div>
+<div class="ln add"><span class="no">22</span><span class="sg">+</span><span class="tx">}</span></div>
+</div>
+            </div></div>
+            <div>
+              <p class="sub">What the map shows</p>
+              <span class="fbox"><span class="fhead"><svg class="ico"><use href="#i-ts"/></svg>session.ts<span class="badge">②</span></span><span class="fns">
+                <span class="fn"><svg class="ico"><use href="#i-fn"/></svg>signToken()<span class="new"></span></span>
+                <span class="fn"><svg class="ico"><use href="#i-fn"/></svg>createSession()</span>
+                <span class="fn"><svg class="ico"><use href="#i-fn"/></svg>rotateSession()<span class="new"></span></span>
+              </span></span>
+              <p class="pv-cap">Line 4 sits outside every function, so its flag (② env var with a hard-coded fallback) goes on the file. The removed line inside <code>createSession()</code> marks it changed.</p>
+            </div>
+          </div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="calls" data-pv="resolve">
+      <span class="kicker">02</span>
+      <h3>Following calls</h3>
+      <p>While parsing, Glance records every call inside each unit, including <code>new Thing()</code> and JSX like <code>&lt;Button /&gt;</code>. Then it works out where each call lands:</p>
+      <ul>
+        <li>a plain name is looked up in the same file first, then in the file's imports</li>
+        <li>named, default and <code>import * as ns</code> imports are all followed, so <code>ns.fn()</code> resolves too</li>
+        <li>relative paths are tried with each TS/JS extension and as a folder's <code>index</code> file</li>
+        <li>a package import, like <code>jose</code>, lands on that dependency's chip when the branch added or changed it in the nearest <code>package.json</code></li>
+      </ul>
+      <p>Calls between two touched functions become arrows. Every function in a changed file counts toward connecting them, so when <code>A()</code> calls an unchanged helper that calls <code>B()</code>, A and B still end up in the same group. Only A and B are drawn.</p>
+      <figure class="pv" id="pv-resolve">
+        <div class="pv-head"><span class="t">Resolving a call</span><span class="d">From a call site to the function it lands on</span></div>
+        <div class="pv-body">
+          <div class="stack">
+            <div class="code">
+              <div class="fname"><svg class="ico"><use href="#i-ts"/></svg>src/api/checkout.ts</div>
+              <div class="lines">
+<div class="ln"><span class="no">1</span><span class="sg"> </span><span class="tx"><span class="k">import</span> { <span class="m">rotateSession</span> } <span class="k">from</span> <span class="s">"../auth/session"</span>;</span></div>
+<div class="ln"><span class="no">2</span><span class="sg"> </span><span class="tx"></span></div>
+<div class="ln"><span class="no">3</span><span class="sg"> </span><span class="tx"><span class="k">export async function</span> <span class="f">handleCheckout</span>(req: Request) {</span></div>
+<div class="ln add"><span class="no">4</span><span class="sg">+</span><span class="tx">  <span class="k">const</span> token = <span class="k">await</span> <span class="m">rotateSession</span>(req.token);</span></div>
+<div class="ln"><span class="no">5</span><span class="sg"> </span><span class="tx">  …</span></div>
+              </div>
+            </div>
+            <ol class="trace">
+              <li><span class="ok">→</span><span><b>handleCheckout()</b> calls <b>rotateSession</b></span></li>
+              <li><span class="ok">→</span><span>imported from <b>"../auth/session"</b></span></li>
+              <li><span class="no">·</span><span>src/auth/session <span class="no">not a file</span></span></li>
+              <li><span class="ok">✓</span><span><b>src/auth/session.ts</b> exists</span></li>
+              <li><span class="ok">✓</span><span>it declares <b>rotateSession()</b>, which the branch touched</span></li>
+            </ol>
+            <div class="net chain" data-edges="a>b">
+              <span class="fn" data-n="a"><svg class="ico"><use href="#i-fn"/></svg>handleCheckout()</span>
+              <span class="fn" data-n="b"><svg class="ico"><use href="#i-fn"/></svg>rotateSession()<span class="new"></span></span>
+            </div>
+            <div>
+              <p class="sub">Through an unchanged helper</p>
+              <div class="net chain" data-edges="x>h h>y">
+                <span class="fn" data-n="x"><svg class="ico"><use href="#i-fn"/></svg>A()</span>
+                <span class="fn ghost" data-n="h"><svg class="ico"><use href="#i-fn"/></svg>helper() · unchanged</span>
+                <span class="fn" data-n="y"><svg class="ico"><use href="#i-fn"/></svg>B()</span>
+              </div>
+              <p class="pv-cap">A and B land in the same group. The graph doesn't draw the helper.</p>
+            </div>
+          </div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="main-change" data-pv="groups">
+      <span class="kicker">03</span>
+      <h3>Finding the main change</h3>
+      <p>Glance treats calls as links in both directions and splits the touched functions into connected groups. The largest group is the main change. Each touched function outside it gets a blue flag: <em>not connected to the main change</em>.</p>
+      <p>Tests don't count toward this. A test calls into everything it covers, so letting tests connect groups would glue unrelated edits together. Test cases still show their calls in the call graph.</p>
+      <p>In the sample, six functions form the session work. <code>formatRelative()</code> and <code>apiFetch()</code> were changed too, but nothing in the main change reaches them. That doesn't make them wrong. It does make them worth asking about, because an agent that was told to rotate sessions also edited a date formatter.</p>
+      <figure class="pv" id="pv-groups">
+        <div class="pv-head"><span class="t">Groups</span><span class="d">Touched functions, linked by calls</span></div>
+        <div class="pv-body">
+          <div class="net groups-fig" data-edges="route>refresh refresh>rotate checkout>rotate rotate>create create>sign">
+            <div class="cluster">
+              <span class="lbl">main change · 6 functions</span>
+              <div class="grid2">
+                <span class="fn" data-n="route"><svg class="ico"><use href="#i-route"/></svg>POST /session/refresh<span class="new"></span></span>
+                <span class="fn" data-n="refresh"><svg class="ico"><use href="#i-fn"/></svg>refreshIfExpiring()<span class="new"></span><span class="badge">①</span></span>
+                <span class="fn" data-n="checkout"><svg class="ico"><use href="#i-fn"/></svg>handleCheckout()</span>
+                <span class="fn" data-n="rotate"><svg class="ico"><use href="#i-fn"/></svg>rotateSession()<span class="new"></span></span>
+                <span></span>
+                <span class="fn" data-n="create"><svg class="ico"><use href="#i-fn"/></svg>createSession()</span>
+                <span></span>
+                <span class="fn" data-n="sign"><svg class="ico"><use href="#i-fn"/></svg>signToken()<span class="new"></span></span>
+              </div>
+            </div>
+            <div class="islands">
+              <div class="cluster island"><span class="lbl">not connected</span><span class="fn"><svg class="ico"><use href="#i-fn"/></svg>formatRelative()<span class="badge stray">③</span></span></div>
+              <div class="cluster island"><span class="lbl">not connected</span><span class="fn"><svg class="ico"><use href="#i-fn"/></svg>apiFetch()<span class="badge stray">④</span></span></div>
+            </div>
+            <p class="pv-cap" style="margin:0">Left out: 5 test cases, which call into the main change but don't connect groups.</p>
+          </div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="flags" data-pv="rules">
+      <span class="kicker">04</span>
+      <h3>Flags</h3>
+      <p>A flag says what a rule found, not whether it's a problem. Rules only look at lines the branch added, except the assertion rule, which looks at removed lines in test files. Code that was already there doesn't get flagged.</p>
+      <p>Flags are numbered top to bottom in the order the map draws them, and the numbers are the same in both views. When you read the PR on GitHub afterwards, "③" means the same thing everywhere.</p>
+      <p>New and changed dependencies aren't flags. Each one gets its own chip under <code>package.json</code>, so a new package is something you review, like a function.</p>
+      <figure class="pv" id="pv-rules">
+        <div class="pv-head"><span class="t">Rules</span><span class="d">What gets a number</span></div>
+        <div class="pv-body">
+          <div class="rules">
+            <div class="rule"><div class="rh"><span class="badge">①</span>error swallowed<small>added lines</small></div>
+              <div class="ex"><span class="k">catch</span> (err) { <span class="k">return</span> null; }</div>
+              <p>A catch block that's empty, or only returns <code>null</code>, <code>undefined</code>, <code>false</code>, <code>[]</code> or <code>{}</code>.</p></div>
+            <div class="rule"><div class="rh"><span class="badge">②</span>env var with a hard-coded fallback<small>added lines</small></div>
+              <div class="ex">process.env.SESSION_SECRET ?? <span class="s">"dev-secret"</span></div>
+              <p>An environment variable with a string after <code>??</code> or <code>||</code>, which quietly runs with a default in production.</p></div>
+            <div class="rule"><div class="rh"><span class="badge">⑤</span>type or lint check bypassed<small>added lines</small></div>
+              <div class="ex"><span class="k">const</span> user = res.body <span class="k">as any</span>;</div>
+              <p><code>as any</code>, <code>@ts-ignore</code>, <code>@ts-nocheck</code> or <code>eslint-disable</code>. Agents reach for these to make errors go away.</p></div>
+            <div class="rule"><div class="rh"><span class="badge">⑤</span>assertion removed<small>removed lines in tests</small></div>
+              <div class="ex" style="color:var(--del)">−  expect(res.status).toBe(200);</div>
+              <p>An <code>expect(</code> or <code>assert</code> line that was deleted and not added back anywhere else in the file.</p></div>
+            <div class="rule"><div class="rh"><span class="badge stray">③</span>not connected to the main change<small>call graph</small></div>
+              <p>Touched code with no call path to the largest group. See the previous step.</p></div>
+          </div>
+          <p class="pv-cap">The numbers are the ones each rule got in the sample pull request.</p>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="skipped" data-pv="skip">
+      <span class="kicker">05</span>
+      <h3>What gets skipped</h3>
+      <p>Some files change in every PR and say nothing about it. Glance still shows them on the map, as dashed chips you can click, but it doesn't parse them or count them as functions to review.</p>
+      <p>To skip more, add a <code>.glance.yml</code> to the repo root with a list of globs. <code>*</code> matches within a folder and <code>**</code> matches across folders.</p>
+      <p>Deleted files don't appear, because the map shows the repo as it is at the head of the branch.</p>
+      <figure class="pv" id="pv-skip">
+        <div class="pv-head"><span class="t">Skipped</span><span class="d">Shown on the map, not reviewed</span></div>
+        <div class="pv-body">
+          <div class="stack">
+            <div class="skips">
+              <span class="file skip"><svg class="ico"><use href="#i-json"/></svg>package-lock.json</span><span>Lockfiles: npm, yarn, pnpm, bun, Cargo, poetry, go.sum, composer, Gemfile</span>
+              <span class="file skip"><svg class="ico"><use href="#i-js"/></svg>app.min.js</span><span>Bundles and source maps: <code>.min.js</code>, <code>.min.css</code>, <code>.map</code></span>
+              <span class="file skip"><svg class="ico"><use href="#i-ts"/></svg>client.ts</span><span><code>@generated</code> or <code>DO NOT EDIT</code> in the first five lines</span>
+              <span class="file skip"><svg class="ico"><use href="#i-md"/></svg>sessions.md</span><span>Matches a pattern in <code>.glance.yml</code></span>
+            </div>
+            <div class="code">
+              <div class="fname"><svg class="ico"><use href="#i-file"/></svg>.glance.yml</div>
+              <div class="lines">
+<div class="ln"><span class="no">1</span><span class="sg"> </span><span class="tx"><span class="k">skip</span>:</span></div>
+<div class="ln"><span class="no">2</span><span class="sg"> </span><span class="tx">  - <span class="s">generated/**</span></span></div>
+<div class="ln"><span class="no">3</span><span class="sg"> </span><span class="tx">  - <span class="s">docs/**</span></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step h2" id="sharing" data-pv="publish" data-toc="Sharing a link">
+      <h2>Sharing a link</h2>
+      <p><code>glance publish</code> uploads the brief and prints a link. Add <code>--pr</code> and it also writes the link into the pull request's description through the GitHub CLI, using the PR's title for the page.</p>
+      <div class="cmd">
+        <pre><span class="p">$ </span>glance publish --pr</pre>
+        <button class="copy" type="button" data-copy="glance publish --pr" aria-label="Copy"><svg><use href="#i-copy"/></svg></button>
+      </div>
+      <p>Each branch keeps one link. The id is saved in <code>.git/glance/briefs.json</code>, so publishing again after a push updates the same page, and the PR description keeps a single marked block that gets replaced, not appended to.</p>
+      <p><strong>What's uploaded.</strong> The brief holds folder and file names, the names of touched functions, which calls which, and the flags. It doesn't hold source code or diffs.</p>
+      <p><strong>Who can see it.</strong> Anyone with the link. Links use a random 128-bit id, are kept out of search engines, and send no referrer. Briefs are stored in a private bucket and are only readable through the page.</p>
+      <p><code>--working</code> can't be published. Commit and push first, so the link matches what's on the PR.</p>
+      <figure class="pv" id="pv-publish">
+        <div class="pv-head"><span class="t">Publishing</span><span class="d">One link per branch, kept up to date</span></div>
+        <div class="pv-body">
+          <div class="stack">
+            <div class="term"><span class="p">$ </span>glance publish --pr
+<span class="o">feature/session-rotation → main: 11 files, 14 functions, 5 flagged</span>
+<span class="u">https://glance.nishilfaldu.site/r/9xQ2mV7cLk0aTf3RzH1bWg</span>
+<span class="o">Linked on https://github.com/acme/storefront/pull/42</span></div>
+            <div class="pr">
+              <div class="prh">Rotate sessions across checkout <span>#42</span></div>
+              <pre>Adds refresh tokens and rotates the session on checkout.
+
+<span class="mk">&lt;!-- glance --&gt;</span>
+**Review map:** https://glance.nishilfaldu.site/r/9xQ2mV7cLk0aTf3RzH1bWg
+<span class="mk">&lt;!-- /glance --&gt;</span></pre>
+            </div>
+            <div class="code">
+              <div class="fname"><svg class="ico"><use href="#i-json"/></svg>.git/glance/briefs.json</div>
+              <div class="lines">
+<div class="ln"><span class="no">1</span><span class="sg"> </span><span class="tx">{</span></div>
+<div class="ln"><span class="no">2</span><span class="sg"> </span><span class="tx">  <span class="s">"feature/session-rotation"</span>: <span class="s">"9xQ2mV7cLk0aTf3RzH1bWg"</span></span></div>
+<div class="ln"><span class="no">3</span><span class="sg"> </span><span class="tx">}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step h2" id="reference" data-pv="help" data-toc="Reference">
+      <h2>Reference</h2>
+      <h3>Commands</h3>
+      <table>
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>glance</code></td><td>Builds the brief and opens it on a local page.</td></tr>
+          <tr><td><code>glance publish</code></td><td>Uploads the brief and prints its secret link.</td></tr>
+          <tr><td><code>glance json</code></td><td>Prints the brief as JSON, for scripts or your own viewer.</td></tr>
+        </tbody>
+      </table>
+      <h3>Options</h3>
+      <table>
+        <thead><tr><th>Option</th><th>Default</th></tr></thead>
+        <tbody>
+          <tr><td><code>--base &lt;ref&gt;</code></td><td>Branch to compare against. Defaults to origin's default branch, then <code>main</code> or <code>master</code>.</td></tr>
+          <tr><td><code>--head &lt;ref&gt;</code></td><td>Commit or branch to review. Defaults to <code>HEAD</code>.</td></tr>
+          <tr><td><code>--working</code></td><td>Include uncommitted and untracked changes. Local only.</td></tr>
+          <tr><td><code>--title &lt;text&gt;</code></td><td>Page title. Defaults to the PR title with <code>--pr</code>, else the branch's first commit message.</td></tr>
+          <tr><td><code>--pr [number]</code></td><td>With <code>publish</code>: link the page on this branch's PR, or PR <em>number</em>. Needs <code>gh</code>.</td></tr>
+          <tr><td><code>--port &lt;n&gt;</code></td><td>Port for the local page. Defaults to any free port.</td></tr>
+          <tr><td><code>--no-open</code></td><td>Start the local page without opening a browser.</td></tr>
+        </tbody>
+      </table>
+      <figure class="pv" id="pv-help">
+        <div class="pv-head"><span class="t">glance --help</span></div>
+        <div class="pv-body">
+          <div class="term" style="border:0;padding:0">glance: map a branch's changes for review
+
+<span class="o">Usage</span>
+  glance [options]           <span class="o">Open the review page for this branch in your browser</span>
+  glance publish [options]   <span class="o">Upload it and print a secret link for the pull request</span>
+  glance json [options]      <span class="o">Print the brief as JSON</span>
+
+<span class="o">Options</span>
+  --base &lt;ref&gt;     <span class="o">Branch to compare against (default: origin's default branch, then main/master)</span>
+  --head &lt;ref&gt;     <span class="o">Commit or branch to review (default: HEAD)</span>
+  --working        <span class="o">Include uncommitted changes, staged or not, and untracked files.</span>
+                   <span class="o">For your own review; it can't be published.</span>
+  --title &lt;text&gt;   <span class="o">Title shown on the page (default: the pull request's title with --pr,</span>
+                   <span class="o">otherwise the first commit message on the branch)</span>
+  --pr [number]    <span class="o">With publish: put the link in the pull request's description</span>
+                   <span class="o">(default: the pull request for this branch). Uses the gh CLI.</span>
+  --port &lt;n&gt;       <span class="o">Port for the local page (default: any free port)</span>
+  --no-open        <span class="o">Start the local page without opening a browser</span>
+  -h, --help       <span class="o">Show this help</span>
+
+<span class="o">Publishing reads GLANCE_PUBLISH_KEY and GLANCE_URL, or ~/.config/glance/config.json.</span></div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="configuration" data-pv="config">
+      <h3>Configuration</h3>
+      <p>Two files, both optional until you publish:</p>
+      <ul>
+        <li><code>.glance.yml</code> in the repo you're reviewing, for extra skip patterns.</li>
+        <li><code>~/.config/glance/config.json</code> on your machine, with the site to publish to and its key. Keep it private with <code>chmod 600</code>.</li>
+      </ul>
+      <p><code>GLANCE_URL</code> and <code>GLANCE_PUBLISH_KEY</code> override the file, which is handy in scripts.</p>
+      <figure class="pv" id="pv-config">
+        <div class="pv-head"><span class="t">Configuration</span><span class="d">Per repo and per machine</span></div>
+        <div class="pv-body">
+          <div class="stack">
+            <div class="code">
+              <div class="fname"><svg class="ico"><use href="#i-file"/></svg>.glance.yml</div>
+              <div class="lines">
+<div class="ln"><span class="no">1</span><span class="sg"> </span><span class="tx"><span class="k">skip</span>:</span></div>
+<div class="ln"><span class="no">2</span><span class="sg"> </span><span class="tx">  - <span class="s">generated/**</span></span></div>
+<div class="ln"><span class="no">3</span><span class="sg"> </span><span class="tx">  - <span class="s">"**/*.snap"</span></span></div>
+              </div>
+            </div>
+            <div class="code">
+              <div class="fname"><svg class="ico"><use href="#i-json"/></svg>~/.config/glance/config.json</div>
+              <div class="lines">
+<div class="ln"><span class="no">1</span><span class="sg"> </span><span class="tx">{</span></div>
+<div class="ln"><span class="no">2</span><span class="sg"> </span><span class="tx">  <span class="s">"url"</span>: <span class="s">"https://glance.nishilfaldu.site"</span>,</span></div>
+<div class="ln"><span class="no">3</span><span class="sg"> </span><span class="tx">  <span class="s">"publishKey"</span>: <span class="s">"…"</span></span></div>
+<div class="ln"><span class="no">4</span><span class="sg"> </span><span class="tx">}</span></div>
+              </div>
+            </div>
+            <div class="skips">
+              <code>GLANCE_URL</code><span>overrides <code>url</code></span>
+              <code>GLANCE_PUBLISH_KEY</code><span>overrides <code>publishKey</code></span>
+            </div>
+          </div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="limits" data-pv="config">
+      <h3>Limits</h3>
+      <p>Glance is young and says so. What it doesn't do yet:</p>
+      <ul>
+        <li>It finds functions in TypeScript and JavaScript only (<code>.ts</code>, <code>.tsx</code>, <code>.js</code>, <code>.jsx</code>, <code>.mjs</code> and friends). Other changed files show up as one chip you review as a whole.</li>
+        <li>Calls on objects, like <code>db.sessions.insert()</code>, aren't followed. Neither are path aliases like <code>@/lib/auth</code>, re-exports through an <code>index</code> file, or dynamic <code>import()</code>.</li>
+        <li>Functions are the smallest unit. Changed types and constants count toward their file.</li>
+        <li>It doesn't run tests or read CI. That's CI's job.</li>
+        <li>A brief can be up to 4&nbsp;MB.</li>
+      </ul>
+    </section>
+
+    <section class="step h2" id="self-hosting" data-pv="host" data-toc="Self-hosting">
+      <h2>Self-hosting</h2>
+      <p>The site is a static viewer plus two small functions, deployed on Vercel from the same repo as the CLI. To publish to your own:</p>
+      <ul>
+        <li>Import the repo into Vercel. There's no build step: <code>public/</code> is served as is.</li>
+        <li>Connect a private Blob store to the project. Vercel adds <code>BLOB_READ_WRITE_TOKEN</code> for you.</li>
+        <li>Set <code>GLANCE_PUBLISH_KEY</code> to a long random string, like the output of <code>openssl rand -base64 32</code>.</li>
+        <li>Put your URL and the same key in <code>~/.config/glance/config.json</code>.</li>
+      </ul>
+      <p>The key only allows writing. Reading a brief needs its id, and the Blob credentials never leave Vercel.</p>
+      <figure class="pv" id="pv-host">
+        <div class="pv-head"><span class="t">Your own deployment</span><span class="d">What runs where</span></div>
+        <div class="pv-body center">
+          <div class="stack">
+            <pre class="tree">glance/
+├─ public/
+│  ├─ index.html        <span class="c">this page</span>
+│  └─ viewer.html       <span class="c">the review page at /r/&lt;id&gt;</span>
+├─ api/brief/
+│  ├─ index.js          <span class="c">POST /api/brief, needs the key</span>
+│  └─ [id].js           <span class="c">GET /api/brief/&lt;id&gt;</span>
+├─ cli/                 <span class="c">the glance command</span>
+└─ vercel.json          <span class="c">/r/:id → viewer.html</span></pre>
+            <div class="skips">
+              <code>GLANCE_PUBLISH_KEY</code><span>any long random string</span>
+              <code>BLOB_READ_WRITE_TOKEN</code><span>added when you connect Blob</span>
+            </div>
+          </div>
+        </div>
+      </figure>
+    </section>
+
+    <footer>
+      <span>Glance, by <a href="https://nishilfaldu.site">Nishil Faldu</a></span>
+      <a href="/r/sample">Example review</a>
+      <a href="#top">Back to top</a>
+    </footer>
+  </main>
+
+  <div class="pane-col"><div class="pane" id="pane" aria-label="Preview"></div></div>
+</div>
+
+<script>
+  // Theme: system (no attribute on <html>), light or dark. Same key as the viewer, so a pick here carries over to review pages.
+  var frames = [].slice.call(document.querySelectorAll(".pv iframe"));
+  (function () {
+    var buttons = document.querySelectorAll("#themes button");
+    function apply(t) {
+      [document].concat(frames.map(function (f) { try { return f.contentDocument; } catch (e) { return null; } })).forEach(function (doc) {
+        if (!doc || !doc.documentElement) return;
+        if (t) doc.documentElement.dataset.theme = t;
+        else delete doc.documentElement.dataset.theme;
+      });
+      buttons.forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.theme === (t || "system"))); });
+    }
+    apply(document.documentElement.dataset.theme);
+    buttons.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var t = b.dataset.theme === "system" ? null : b.dataset.theme;
+        apply(t);
+        try { if (t) localStorage.setItem("glance-theme", t); else localStorage.removeItem("glance-theme"); } catch (e) {}
+      });
+    });
+  })();
+
+  document.querySelectorAll("[data-copy]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      if (!navigator.clipboard) return;
+      navigator.clipboard.writeText(b.dataset.copy).then(function () {
+        b.dataset.done = "";
+        b.firstChild.firstChild.setAttribute("href", "#i-check");
+        setTimeout(function () { delete b.dataset.done; b.firstChild.firstChild.setAttribute("href", "#i-copy"); }, 1400);
+      });
+    });
+  });
+
+  // Arrows between chips: data-edges="a>b" links [data-n=a] to [data-n=b], sideways or downwards, whichever way b lies.
+  var NS = "http://www.w3.org/2000/svg", marker = 0;
+  function drawEdges(net) {
+    var old = net.querySelector(":scope > svg.edges");
+    if (old) old.remove();
+    var box = net.getBoundingClientRect();
+    if (!box.width) return;
+    var id = "ah" + ++marker;
+    var svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("class", "edges");
+    svg.innerHTML = '<defs><marker id="' + id + '" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L8,4 L0,8 z"/></marker></defs>';
+    net.dataset.edges.split(" ").forEach(function (pair) {
+      var ends = pair.split(">");
+      var a = net.querySelector('[data-n="' + ends[0] + '"]'), b = net.querySelector('[data-n="' + ends[1] + '"]');
+      if (!a || !b) return;
+      var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(), d;
+      var ax = ra.left - box.left, ay = ra.top - box.top, bx = rb.left - box.left, by = rb.top - box.top;
+      if (rb.left >= ra.right + 8) {
+        var x1 = ax + ra.width + 3, y1 = ay + ra.height / 2, x2 = bx - 4, y2 = by + rb.height / 2, m = (x1 + x2) / 2;
+        d = "M" + x1 + " " + y1 + " C" + m + " " + y1 + " " + m + " " + y2 + " " + x2 + " " + y2;
+      } else {
+        var down = rb.top >= ra.bottom;
+        // Chips stacked on the same left edge get a straight line near that edge; others link their centers.
+        var aligned = Math.abs(ax - bx) < 4;
+        var sx = aligned ? ax + 18 : ax + ra.width / 2, tx = aligned ? sx : bx + rb.width / 2;
+        var sy = down ? ay + ra.height + 3 : ay - 3, ty = down ? by - 4 : by + rb.height + 4, my = (sy + ty) / 2;
+        d = "M" + sx + " " + sy + " C" + sx + " " + my + " " + tx + " " + my + " " + tx + " " + ty;
+      }
+      var p = document.createElementNS(NS, "path");
+      p.setAttribute("d", d);
+      p.setAttribute("marker-end", "url(#" + id + ")");
+      if (a.classList.contains("ghost") || b.classList.contains("ghost")) p.setAttribute("class", "soft");
+      svg.appendChild(p);
+    });
+    net.insertBefore(svg, net.firstChild);
+  }
+  function drawAll() { document.querySelectorAll(".net[data-edges]").forEach(drawEdges); }
+
+  // Previews: inline under their section on narrow screens; on wide ones they move into the sticky pane
+  // and the one for the section you're reading fades in. Iframes load once they're placed, so they load once.
+  var pane = document.getElementById("pane");
+  var figs = [].slice.call(document.querySelectorAll("figure.pv"));
+  var slots = figs.map(function (f) { var s = document.createComment("pv"); f.parentNode.insertBefore(s, f); return s; });
+  var wide = matchMedia("(min-width: 1080px)");
+  var active = null;
+  function place() {
+    figs.forEach(function (f, i) {
+      if (wide.matches) pane.appendChild(f);
+      else slots[i].parentNode.insertBefore(f, slots[i].nextSibling);
+    });
+    frames.forEach(function (f) { if (!f.src) f.src = f.dataset.src; });
+    show(active, true);
+    drawAll();
+  }
+  function show(name, force) {
+    if (!name || (name === active && !force)) return;
+    active = name;
+    figs.forEach(function (f) { f.classList.toggle("on", f.id === "pv-" + name); });
+  }
+
+  var steps = [].slice.call(document.querySelectorAll(".step"));
+  var tocLinks = {};
+  var toc = document.getElementById("toc");
+  steps.forEach(function (s) {
+    if (!s.dataset.toc) return;
+    var li = document.createElement("li"), a = document.createElement("a");
+    a.href = "#" + s.id;
+    a.textContent = s.dataset.toc;
+    li.appendChild(a);
+    toc.appendChild(li);
+    tocLinks[s.id] = a;
+  });
+  function current(step) {
+    show(step.dataset.pv);
+    var i = steps.indexOf(step), head = null;
+    for (; i >= 0 && !head; i--) if (steps[i].dataset.toc) head = steps[i].id;
+    Object.keys(tocLinks).forEach(function (k) { tocLinks[k].setAttribute("aria-current", String(k === head)); });
+  }
+  // The section crossing a line 40% down the window is the one being read.
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) { if (e.isIntersecting) current(e.target); });
+  }, { rootMargin: "-40% 0px -59% 0px" });
+  steps.forEach(function (s) { io.observe(s); });
+  // At the very bottom the last short sections may never reach the line.
+  addEventListener("scroll", function () {
+    if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) current(steps[steps.length - 1]);
+  }, { passive: true });
+
+  active = "map";
+  place();
+  wide.addEventListener("change", place);
+  var queued = false;
+  addEventListener("resize", function () {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(function () { queued = false; drawAll(); });
+  });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawAll);
+</script>
 </body>
 </html>
