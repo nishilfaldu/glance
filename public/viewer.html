@@ -83,10 +83,11 @@
   /* Minimap */
   .map { display: grid; gap: 10px; }
   .row { display: grid; grid-template-columns: 104px 1fr; gap: 10px; align-items: start; }
-  .groups { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; align-items: flex-start; }
+  .groups { display: flex; flex-direction: column; gap: 6px; min-width: 0; align-items: flex-start; }
+  .line { display: flex; flex-wrap: wrap; gap: inherit; align-items: flex-start; min-width: 0; max-width: 100%; }
   .group { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px 6px;
     border: 1px solid var(--line); border-radius: 6px; min-width: 0; }
-  .group .files { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-start; }
+  .group .files { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; min-width: 0; }
   .group > .dir { color: var(--fg); font-weight: 600; padding: 1px 0; }
   .group.quiet { border-color: transparent; }
   .group.quiet > .dir { color: var(--muted); font-weight: 500; }
@@ -307,17 +308,20 @@
     function folded(dir) {
       return el("span", "folded", icon("dir", dir.color) + esc(dir.name) + '/ <span class="count">' + dir.count + "</span>");
     }
-    // Files first, then sub-folders as nested boxes.
+    // Files on one line, then sub-folders as nested boxes starting on their own line, so siblings share a left edge.
     function fillDir(holder, dir, prefix) {
-      (dir.files || []).forEach(function (f) { holder.appendChild(fileNode(f, join(prefix, f.name))); });
-      if (dir.more) holder.appendChild(el("span", "more", "+" + dir.more + " more"));
+      var fileLine = el("div", "line"), dirLine = el("div", "line");
+      (dir.files || []).forEach(function (f) { fileLine.appendChild(fileNode(f, join(prefix, f.name))); });
+      if (dir.more) fileLine.appendChild(el("span", "more", "+" + dir.more + " more"));
+      if (fileLine.firstChild) holder.appendChild(fileLine);
+      if ((dir.dirs || []).length) holder.appendChild(dirLine);
       (dir.dirs || []).forEach(function (sub) {
-        if (sub.collapsed) return holder.appendChild(folded(sub));
+        if (sub.collapsed) return dirLine.appendChild(folded(sub));
         var box = el("div", touched(sub) ? "group" : "group quiet", dirLabel(sub.name, sub.color));
         var inner = el("div", "files");
         box.appendChild(inner);
         fillDir(inner, sub, join(prefix, sub.name));
-        holder.appendChild(box);
+        dirLine.appendChild(box);
       });
     }
 
