@@ -6,10 +6,13 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="data:,">
 <title>Glance</title>
+<script>try { var t = localStorage.getItem("glance-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&display=swap">
 <style>
   :root { --bg: #ffffff; --fg: #171717; --muted: #666666; --line: #ebebeb; color-scheme: light; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #000000; --fg: #ededed; --muted: #a1a1a1; --line: #262626; color-scheme: dark } }
+  /* Same theme rules as the viewer: system unless a theme was picked there */
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #000000; --fg: #ededed; --muted: #a1a1a1; --line: #262626; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #000000; --fg: #ededed; --muted: #a1a1a1; --line: #262626; color-scheme: dark }
   body { margin: 0; min-height: 100vh; display: grid; place-content: center; gap: 8px; text-align: center;
     background: var(--bg); color: var(--fg); font: 15px/1.5 "Geist", system-ui, sans-serif;
     padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); }

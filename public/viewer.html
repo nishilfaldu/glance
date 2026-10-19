@@ -6,21 +6,27 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="data:,">
 <title>Glance</title>
+<script>try { var t = localStorage.getItem("glance-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
 <style>
   /* Layout: one column — where (whole-repo minimap) above how (affected paths down to functions + calls), same chips in both */
   :root {
     --bg: #ffffff; --surface: #ffffff; --fg: #171717; --muted: #666666; --faint: #a8a8a8;
-    --line: #ebebeb; --chip: #f7f7f7; --risk: #a35200; --risk-bg: #fff4e5;
-    --stray: #7c3aed; --stray-bg: #f3ecff; --new: #16a34a; --accent: #171717;
+    --line: #ebebeb; --chip: #f5f5f5; --risk: #a35200; --risk-bg: #fff4e5;
+    --stray: #0068d6; --stray-bg: #e9f4ff; --new: #107d32; --accent: #171717;
     --sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
     color-scheme: light;
   }
-  @media (prefers-color-scheme: dark) { :root {
+  /* Dark follows the system unless the theme switch picked one; the two blocks below must stay identical */
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
     --bg: #000000; --surface: #0a0a0a; --fg: #ededed; --muted: #a1a1a1; --faint: #575757;
-    --line: #262626; --chip: #111111; --risk: #f5a524; --risk-bg: #261a06;
-    --stray: #bf7af0; --stray-bg: #1d1029; --new: #45d483; --accent: #ededed; color-scheme: dark } }
+    --line: #262626; --chip: #1a1a1a; --risk: #f5a524; --risk-bg: #261a06;
+    --stray: #52a8ff; --stray-bg: #0d1a2b; --new: #45d483; --accent: #ededed; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #000000; --surface: #0a0a0a; --fg: #ededed; --muted: #a1a1a1; --faint: #575757;
+    --line: #262626; --chip: #1a1a1a; --risk: #f5a524; --risk-bg: #261a06;
+    --stray: #52a8ff; --stray-bg: #0d1a2b; --new: #45d483; --accent: #ededed; color-scheme: dark }
 
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--sans);
@@ -31,6 +37,14 @@
   .wrap { max-width: 860px; margin: 0 auto; display: grid; gap: 16px; }
   h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; margin: 0; text-wrap: balance; }
   .branch { font: 13px var(--mono); color: var(--muted); }
+  .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .themes { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 999px; flex: none; }
+  .themes button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 999px;
+    background: none; color: var(--muted); cursor: pointer; }
+  .themes button:hover { color: var(--fg); }
+  .themes button[aria-pressed="true"] { background: var(--chip); color: var(--fg); }
+  .themes button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .themes svg { width: 15px; height: 15px; }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
     padding: 20px 24px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; min-width: 0; }
   .label { font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: 10px; }
@@ -63,7 +77,7 @@
   .row { display: grid; grid-template-columns: 104px 1fr; gap: 10px; align-items: start; }
   .groups { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; align-items: flex-start; }
   .group { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px 6px;
-    border: 1px solid var(--line); border-left: 3px solid var(--fc); border-radius: 6px; min-width: 0; }
+    border: 1px solid var(--line); border-radius: 6px; min-width: 0; }
   .group .files { display: flex; flex-wrap: wrap; gap: 4px; align-items: flex-start; }
   .group > .dir { color: var(--fg); font-weight: 600; padding: 1px 0; }
   .fbox { display: inline-flex; flex-direction: column; gap: 4px; padding: 3px 7px 5px; border-radius: 6px; background: var(--chip); min-width: 0; max-width: 100%; }
@@ -119,13 +133,23 @@
   <symbol id="i-case" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.3" fill="none" stroke="#0f9d8a" stroke-width="1.4"/><path d="M5.2 8.2l1.9 1.9 3.8-4" fill="none" stroke="#0f9d8a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-route" viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="10" rx="2" fill="none" stroke="#e0a030" stroke-width="1.3"/><path d="M5 8h6m-2-2l2 2-2 2" fill="none" stroke="#e0a030" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-dep" viewBox="0 0 16 16"><path d="M8 1.5l5.6 3.2v6.6L8 14.5l-5.6-3.2V4.7z" fill="#cb3837"/><path d="M2.6 4.8L8 8l5.4-3.2M8 8v6.3" fill="none" stroke="#fff" stroke-width="1.1"/></symbol>
+  <symbol id="i-system" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 14h5M8 11.5V14" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+  <symbol id="i-light" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+  <symbol id="i-dark" viewBox="0 0 16 16"><path d="M13.5 9.8A6 6 0 0 1 6.2 2.5a6 6 0 1 0 7.3 7.3z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></symbol>
 </svg>
 
 <div class="wrap">
-  <div>
-    <h1 id="title">Loading…</h1>
-    <span class="branch" id="branch"></span>
-  </div>
+  <header class="head">
+    <div>
+      <h1 id="title">Loading…</h1>
+      <span class="branch" id="branch"></span>
+    </div>
+    <div class="themes" id="themes" role="group" aria-label="Theme">
+      <button type="button" data-theme="system" aria-label="System theme" title="System"><svg><use href="#i-system"/></svg></button>
+      <button type="button" data-theme="light" aria-label="Light theme" title="Light"><svg><use href="#i-light"/></svg></button>
+      <button type="button" data-theme="dark" aria-label="Dark theme" title="Dark"><svg><use href="#i-dark"/></svg></button>
+    </div>
+  </header>
 
   <p class="message" id="message" hidden></p>
 
@@ -150,6 +174,24 @@
   // File state: "changed" | "new" | "same" | "skip". Changed files list fns; a changed file with no fns is reviewed as a whole.
   // Function kind: fn | case (test) | route | dep; state: "new" | "changed".
   // calls: ids ("path#name") of touched functions this one calls. spot: number shown on the file or function.
+  // Theme: system (no attribute on <html>), light or dark; an explicit pick is remembered in this browser
+  (function () {
+    var buttons = document.querySelectorAll("#themes button");
+    function apply(t) {
+      if (t) document.documentElement.dataset.theme = t;
+      else delete document.documentElement.dataset.theme;
+      buttons.forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.theme === (t || "system"))); });
+    }
+    apply(document.documentElement.dataset.theme);
+    buttons.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var t = b.dataset.theme === "system" ? null : b.dataset.theme;
+        apply(t);
+        try { if (t) localStorage.setItem("glance-theme", t); else localStorage.removeItem("glance-theme"); } catch (e) {}
+      });
+    });
+  })();
+
   var marks = ["", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"];
   var kindIcon = { fn: "fn", case: "case", route: "route", dep: "dep" };
 
@@ -254,7 +296,6 @@
       (dir.dirs || []).forEach(function (sub) {
         if (sub.collapsed) return holder.appendChild(folded(sub));
         var box = el("div", "group", dirLabel(sub.name, sub.color));
-        box.style.setProperty("--fc", sub.color);
         var inner = el("div", "files");
         box.appendChild(inner);
         fillDir(inner, sub, join(prefix, sub.name));
