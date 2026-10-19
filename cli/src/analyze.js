@@ -202,7 +202,7 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
     }
   }
 
-  // 4. The tree the viewer draws: every folder, collapsed where nothing changed.
+  // 4. The tree the viewer draws: every folder and its files, unchanged ones included.
   const tree = { name: basename(root), dirs: new Map(), files: [] };
   for (const path of headFiles) {
     const parts = path.split("/");
@@ -229,8 +229,6 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
     });
     return entry;
   };
-  const countFiles = (node) => node.files.length + [...node.dirs.values()].reduce((n, d) => n + countFiles(d), 0);
-  const hasChanges = (node) => node.files.some((p) => changes.has(p)) || [...node.dirs.values()].some(hasChanges);
 
   function build(node) {
     let name = node.name;
@@ -240,7 +238,6 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
       name += `/${node.name}`;
     }
     const out = { name, color: folderColor(name) };
-    if (!hasChanges(node)) return { ...out, collapsed: true, count: countFiles(node) };
     const changedFiles = node.files.filter((p) => changes.has(p));
     const unchanged = node.files.filter((p) => !changes.has(p));
     const shown = new Set([...changedFiles, ...unchanged.slice(0, MAX_UNCHANGED_SHOWN)]);

@@ -170,7 +170,8 @@
 
 <script>
   // Brief data shape: { repo, title, head, base, root }.
-  // A folder is { name, color, files, dirs, more? } or, when nothing in it changed, { name, color, collapsed: true, count }.
+  // A folder is { name, color, files, dirs, more? }. Briefs from before every folder was listed may hold
+  // { name, color, collapsed: true, count } for folders where nothing changed.
   // File state: "changed" | "new" | "same" | "skip". Changed files list fns; a changed file with no fns is reviewed as a whole.
   // Function kind: fn | case (test) | route | dep; state: "new" | "changed".
   // calls: ids ("path#name") of touched functions this one calls. spot: number shown on the file or function.

@@ -156,8 +156,14 @@
           {
             "name": "payments",
             "color": "#29b6f6",
-            "collapsed": true,
-            "count": 1
+            "files": [
+              {
+                "name": "stripe.ts",
+                "icon": "ts",
+                "state": "same"
+              }
+            ],
+            "dirs": []
           },
           {
             "name": "utils",
