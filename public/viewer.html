@@ -115,7 +115,7 @@
   @media (prefers-reduced-motion: reduce) { .call { transition: none; } }
 
 
-  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--muted); margin-top: -6px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--muted); margin-top: -8px; }
   .legend .key { display: inline-flex; align-items: center; gap: 6px; }
   .legend .skipped { width: 18px; height: 12px; flex: none; border: 1px dashed var(--faint); border-radius: 3px; }
 
@@ -175,6 +175,8 @@
       <button type="button" role="tab" id="tab-calls" data-tab="calls" aria-controls="panel-calls">Call graph</button>
     </div>
 
+    <div class="legend" id="legend" aria-label="Legend" hidden></div>
+
     <section class="panel" role="tabpanel" id="panel-map" aria-labelledby="tab-map">
       <div class="map" id="map"></div>
     </section>
@@ -182,8 +184,6 @@
     <section class="panel" role="tabpanel" id="panel-calls" aria-labelledby="tab-calls" hidden>
       <div class="graph-scroll"><div class="graph" id="graph"></div></div>
     </section>
-
-    <div class="legend" id="legend" aria-label="Legend" hidden></div>
 
     <div class="strip" id="strip" aria-live="polite"><span class="hint">Select a function to mark it reviewed</span></div>
   </article>
