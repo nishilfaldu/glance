@@ -115,6 +115,10 @@
   @media (prefers-reduced-motion: reduce) { .call { transition: none; } }
 
 
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--muted); margin-top: -6px; }
+  .legend .key { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .skipped { width: 18px; height: 12px; flex: none; border: 1px dashed var(--faint); border-radius: 3px; }
+
   .strip { position: sticky; bottom: max(8px, env(safe-area-inset-bottom, 0px)); display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 34px;
     padding: 6px 10px; border-radius: 6px; background: var(--chip); border: 1px solid var(--line); font-size: 13px; }
   .strip .hint { color: var(--muted); }
@@ -178,6 +182,8 @@
     <section class="panel" role="tabpanel" id="panel-calls" aria-labelledby="tab-calls" hidden>
       <div class="graph-scroll"><div class="graph" id="graph"></div></div>
     </section>
+
+    <div class="legend" id="legend" aria-label="Legend" hidden></div>
 
     <div class="strip" id="strip" aria-live="polite"><span class="hint">Select a function to mark it reviewed</span></div>
   </article>
@@ -502,6 +508,28 @@
       });
     }
     refreshDone();
+
+    // Legend: only the markers this brief uses
+    var seen = {};
+    (function scan(dir) {
+      (dir.files || []).forEach(function (f) {
+        [f].concat(f.fns || []).forEach(function (x) {
+          if (x.spot) seen[x.stray ? "stray" : "risk"] = true;
+          if (x.state === "new") seen.new = true;
+        });
+        if (f.state === "skip") seen.skip = true;
+      });
+      (dir.dirs || []).forEach(scan);
+    })(root);
+    var keys = [
+      ["risk", '<span class="badge">①</span>', "risky pattern"],
+      ["stray", '<span class="badge stray">①</span>', "not connected to the main change"],
+      ["new", '<span class="new"></span>', "new"],
+      ["skip", '<span class="skipped"></span>', "skipped: lockfile, generated, or listed in .glance.yml"],
+    ].filter(function (k) { return seen[k[0]]; });
+    var legend = document.getElementById("legend");
+    legend.innerHTML = keys.map(function (k) { return '<span class="key">' + k[1] + k[2] + "</span>"; }).join("");
+    legend.hidden = !keys.length;
 
     function clearSel() {
       document.querySelectorAll(".sel").forEach(function (c) { c.classList.remove("sel"); });
