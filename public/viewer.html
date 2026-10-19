@@ -48,6 +48,13 @@
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
     padding: 20px 24px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; min-width: 0; }
   .label { font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: 10px; }
+  .tabs { display: flex; gap: 4px; margin: -8px 0 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .tabs button { font: 500 13.5px var(--sans); color: var(--muted); background: none; border: 0; border-bottom: 2px solid transparent;
+    margin-bottom: -1px; padding: 8px 10px 10px; cursor: pointer; white-space: nowrap; }
+  .tabs button:hover { color: var(--fg); }
+  .tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--fg); }
+  .tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
+  .panel { display: grid; gap: 22px; min-width: 0; }
   .message { color: var(--muted); }
 
   /* Shared chips */
@@ -61,7 +68,7 @@
   .fn { display: inline-flex; align-items: center; gap: 5px; font: 11.5px var(--mono); padding: 2px 7px;
     border-radius: 5px; border: 1px solid var(--line); background: var(--surface); color: var(--fg);
     white-space: nowrap; cursor: pointer; max-width: 100%; }
-  .map .fn { white-space: normal; text-align: left; }
+  .map .fn, .tests .fn, .loose .fn { white-space: normal; text-align: left; }
   .fn:focus-visible, .file.skip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .fn.sel, .file.sel { border-color: var(--accent); }
   .fn.done, .file.done, .fbox.done { opacity: .35; }
@@ -102,6 +109,16 @@
   .graph.focus .call { opacity: .08; }
   .graph.focus .call.hot { opacity: 1; stroke: var(--accent); }
   @media (prefers-reduced-motion: reduce) { .call { transition: none; } }
+
+  /* Call flow */
+  .fnode { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+  .flow .fnode { position: absolute; }
+  .fnode .where { font: 11px var(--mono); color: var(--faint); padding-left: 8px; white-space: nowrap; }
+  .loose { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+  .tests { display: grid; gap: 6px; }
+  .trow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+  .trow .covers { font: 11.5px var(--mono); color: var(--muted); }
+  .fn.lit { border-color: var(--fg); background: var(--chip); }
 
   .strip { position: sticky; bottom: max(8px, env(safe-area-inset-bottom, 0px)); display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 34px;
     padding: 6px 10px; border-radius: 6px; background: var(--chip); border: 1px solid var(--line); font-size: 13px; }
@@ -154,14 +171,24 @@
   <p class="message" id="message" hidden></p>
 
   <article class="card" id="card" hidden>
-    <section>
-      <div class="label">Where</div>
+    <div class="tabs" role="tablist" aria-label="View">
+      <button type="button" role="tab" id="tab-where" data-tab="where" aria-controls="panel-where">Where</button>
+      <button type="button" role="tab" id="tab-how" data-tab="how" aria-controls="panel-how">How it connects</button>
+      <button type="button" role="tab" id="tab-flow" data-tab="flow" aria-controls="panel-flow">Call flow</button>
+    </div>
+
+    <section class="panel" role="tabpanel" id="panel-where" aria-labelledby="tab-where">
       <div class="map" id="map"></div>
     </section>
 
-    <section>
-      <div class="label">How it connects</div>
+    <section class="panel" role="tabpanel" id="panel-how" aria-labelledby="tab-how" hidden>
       <div class="graph-scroll"><div class="graph" id="graph"></div></div>
+    </section>
+
+    <section class="panel" role="tabpanel" id="panel-flow" aria-labelledby="tab-flow" hidden>
+      <div class="graph-scroll"><div class="graph flow" id="flow"></div></div>
+      <div id="loose-wrap" hidden><div class="label">Not connected to the main change</div><div class="loose" id="loose"></div></div>
+      <div id="tests-wrap" hidden><div class="label">Tested by</div><div class="tests" id="tests"></div></div>
     </section>
 
     <div class="strip" id="strip" aria-live="polite"><span class="hint">Select a function to mark it reviewed</span></div>
@@ -368,10 +395,7 @@
       var e;
       if (n.fn) {
         e = fnChip(n.fn, n.path);
-        e.addEventListener("mouseenter", function () { focusCalls(n.id); });
-        e.addEventListener("mouseleave", function () { focusCalls(null); });
-        e.addEventListener("focus", function () { focusCalls(n.id); });
-        e.addEventListener("blur", function () { focusCalls(null); });
+        hoverFocus(e, graph, n.id);
       } else if (n.file && !n.kids.length) {
         e = unitChip(n.path, null, n.file, n.path);
       } else if (n.file) {
@@ -430,12 +454,183 @@
       graph.style.height = rows * ROW + "px";
       graph.insertBefore(svg, graph.firstChild);
     }
-    draw();
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+    function hoverFocus(e, box, fid) {
+      e.addEventListener("mouseenter", function () { focusCalls(box, fid); });
+      e.addEventListener("mouseleave", function () { focusCalls(box, null); });
+      e.addEventListener("focus", function () { focusCalls(box, fid); });
+      e.addEventListener("blur", function () { focusCalls(box, null); });
+    }
 
-    function focusCalls(fid) {
-      graph.classList.toggle("focus", !!fid);
-      graph.querySelectorAll(".call").forEach(function (p) {
+    // Call flow: touched functions placed by who calls whom, entry points at the top. Folders are the minimap's job,
+    // so each function only carries its file. Tests and functions with no path to the main change are listed below.
+    var units = [];
+    (function collect(dir, prefix, depth) {
+      function files() {
+        (dir.files || []).forEach(function (f) {
+          if (!reviewable(f)) return;
+          var path = join(prefix, f.name);
+          (f.fns || []).forEach(function (fn) { units.push({ fn: fn, path: path, id: path + "#" + fn.name }); });
+        });
+      }
+      function dirs() { (dir.dirs || []).forEach(function (sub) { if (!sub.collapsed) collect(sub, join(prefix, sub.name), depth + 1); }); }
+      if (depth === 0) { dirs(); files(); } else { files(); dirs(); }
+    })(root, "", 0);
+
+    var flow = document.getElementById("flow");
+    var FROW = 74, FGAP = 20;
+    var flowUnits = units.filter(function (u) { return u.fn.kind !== "case" && !u.fn.stray; });
+    var unitById = {};
+    flowUnits.forEach(function (u) { unitById[u.id] = u; u.out = []; u.in = []; });
+    flowUnits.forEach(function (u) {
+      (u.fn.calls || []).forEach(function (to) {
+        if (unitById[to] && to !== u.id) { u.out.push(unitById[to]); unitById[to].in.push(u); }
+      });
+    });
+    // Level: the longest chain of callers above it, skipping calls that loop back. Entry points with no callers
+    // sit just above the first function they call, so their arrows stay short.
+    var onPath = {};
+    function levelOf(u) {
+      if (u.level !== undefined) return u.level;
+      onPath[u.id] = true;
+      var l = 0;
+      u.in.forEach(function (p) { if (!onPath[p.id]) l = Math.max(l, levelOf(p) + 1); });
+      onPath[u.id] = false;
+      return (u.level = l);
+    }
+    flowUnits.forEach(levelOf);
+    flowUnits.forEach(function (u) {
+      if (u.in.length || !u.out.length) return;
+      u.level = Math.max(u.level, Math.min.apply(null, u.out.map(function (t) { return t.level; })) - 1);
+    });
+    var flowLevels = [];
+    flowUnits.forEach(function (u) { (flowLevels[u.level] = flowLevels[u.level] || []).push(u); });
+
+    function shortPath(path) { return path.split("/").slice(-2).join("/"); }
+    function flowNode(u) {
+      var node = el("div", "fnode");
+      u.chip = fnChip(u.fn, u.path);
+      node.appendChild(u.chip);
+      node.appendChild(el("span", "where", esc(shortPath(u.path))));
+      return node;
+    }
+    flowUnits.forEach(function (u) {
+      u.el = flowNode(u);
+      u.el.style.top = u.level * FROW + "px";
+      hoverFocus(u.chip, flow, u.id);
+      flow.appendChild(u.el);
+    });
+
+    var loose = units.filter(function (u) { return u.fn.kind !== "case" && u.fn.stray; });
+    loose.forEach(function (u) { document.getElementById("loose").appendChild(flowNode(u)); });
+    document.getElementById("loose-wrap").hidden = !loose.length;
+
+    var nameOf = {};
+    units.forEach(function (u) { nameOf[u.id] = u.fn.name; });
+    var tests = units.filter(function (u) { return u.fn.kind === "case"; });
+    tests.forEach(function (u) {
+      var row = el("div", "trow");
+      var chip = fnChip(u.fn, u.path);
+      var covered = (u.fn.calls || []).filter(function (id) { return nameOf[id]; });
+      row.appendChild(chip);
+      if (covered.length) row.appendChild(el("span", "covers", "→ " + covered.map(function (id) { return esc(nameOf[id]); }).join(", ")));
+      // Hovering a test lights up the functions it calls, wherever they sit in this tab
+      function light(on) {
+        covered.forEach(function (id) {
+          (chips[id] || []).forEach(function (c) { if (document.getElementById("panel-flow").contains(c)) c.classList.toggle("lit", on); });
+        });
+      }
+      ["mouseenter", "focus"].forEach(function (ev) { chip.addEventListener(ev, function () { light(true); }); });
+      ["mouseleave", "blur"].forEach(function (ev) { chip.addEventListener(ev, function () { light(false); }); });
+      document.getElementById("tests").appendChild(row);
+    });
+    document.getElementById("tests-wrap").hidden = !tests.length;
+
+    function drawFlow() {
+      var old = flow.querySelector("svg.links");
+      if (old) old.remove();
+      // Each level packs left to right, every function as close as it can get under its callers
+      var width = 0;
+      flowUnits.forEach(function (u) { u.x = undefined; });
+      function cx(u) { return u.x + u.chip.offsetWidth / 2; }
+      flowLevels.forEach(function (list, l) {
+        list.forEach(function (u) {
+          var xs = u.in.filter(function (p) { return p.level < l; }).map(cx);
+          u.want = xs.length ? xs.reduce(function (a, b) { return a + b; }, 0) / xs.length - u.chip.offsetWidth / 2 : -1;
+        });
+        list.sort(function (a, b) { return a.want - b.want; });
+        var cursor = 0;
+        list.forEach(function (u) {
+          u.x = Math.max(cursor, u.want);
+          u.el.style.left = u.x + "px";
+          cursor = u.x + u.el.offsetWidth + FGAP;
+          width = Math.max(width, u.x + u.el.offsetWidth);
+        });
+      });
+
+      var svg = document.createElementNS(NS, "svg");
+      svg.setAttribute("class", "links");
+      svg.innerHTML = '<defs><marker id="ah-flow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path class="arrow" d="M0,0 L8,4 L0,8 z"/></marker></defs>';
+      flowUnits.forEach(function (u) {
+        u.out.forEach(function (t) {
+          var d;
+          if (t.level > u.level) {
+            var y1 = u.el.offsetTop + u.el.offsetHeight + 2, y2 = t.el.offsetTop - 3, m = (y1 + y2) / 2;
+            d = "M" + cx(u) + " " + y1 + " C" + cx(u) + " " + m + " " + cx(t) + " " + m + " " + cx(t) + " " + y2;
+          } else {
+            // A call back up (recursion or a cycle) loops round on the right
+            var xs = u.x + u.chip.offsetWidth + 4, ys = u.el.offsetTop + u.chip.offsetHeight / 2;
+            var xt = t.x + t.chip.offsetWidth + 5, yt = t.el.offsetTop + t.chip.offsetHeight / 2;
+            var bulge = 24 + 10 * (u.level - t.level);
+            width = Math.max(width, Math.max(xs, xt) + bulge);
+            d = "M" + xs + " " + ys + " C" + (xs + bulge) + " " + ys + " " + (xt + bulge) + " " + yt + " " + xt + " " + yt;
+          }
+          var p = document.createElementNS(NS, "path");
+          p.setAttribute("d", d);
+          p.setAttribute("class", "call");
+          p.setAttribute("marker-end", "url(#ah-flow)");
+          p.dataset.a = u.id; p.dataset.b = t.id;
+          svg.appendChild(p);
+        });
+      });
+      var last = flowUnits.reduce(function (h, u) { return Math.max(h, u.el.offsetTop + u.el.offsetHeight); }, 0);
+      flow.style.width = width + 16 + "px";
+      flow.style.height = last + "px";
+      flow.insertBefore(svg, flow.firstChild);
+    }
+
+    // Tabs: one view at a time. The graphs measure their chips, so each is drawn when its tab is shown.
+    var drawers = { how: draw, flow: drawFlow };
+    var tabs = [].slice.call(document.querySelectorAll('[role="tab"]'));
+    var current;
+    function showTab(name) {
+      current = name;
+      tabs.forEach(function (t) {
+        var on = t.dataset.tab === name;
+        t.setAttribute("aria-selected", String(on));
+        t.tabIndex = on ? 0 : -1;
+        document.getElementById("panel-" + t.dataset.tab).hidden = !on;
+      });
+      if (drawers[name]) drawers[name]();
+      try { localStorage.setItem("glance-tab", name); } catch (e) {}
+    }
+    tabs.forEach(function (t, i) {
+      t.addEventListener("click", function () { showTab(t.dataset.tab); });
+      t.addEventListener("keydown", function (e) {
+        var step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        if (!step) return;
+        var next = tabs[(i + step + tabs.length) % tabs.length];
+        next.focus();
+        showTab(next.dataset.tab);
+      });
+    });
+    var saved = null;
+    try { saved = localStorage.getItem("glance-tab"); } catch (e) {}
+    showTab(tabs.some(function (t) { return t.dataset.tab === saved; }) ? saved : "where");
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (drawers[current]) drawers[current](); });
+
+    function focusCalls(box, fid) {
+      box.classList.toggle("focus", !!fid);
+      box.querySelectorAll(".call").forEach(function (p) {
         p.classList.toggle("hot", !!fid && (p.dataset.a === fid || p.dataset.b === fid));
       });
     }
