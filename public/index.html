@@ -257,6 +257,7 @@
     <section class="step" id="share" data-pv="publish">
       <h2>Share it</h2>
       <p>To share the page, run <code>glance publish --pr</code>. It uploads the brief (described below) to your own Vercel Blob store and adds the link to the pull request's description. Running it again updates the same link. The upload has file and function names, not your code.</p>
+      <p>The link opens a page on glance.nishilfaldu.site, and that page loads the brief from your store. The part of the link after the <code>#</code> says which store and brief to load. Browsers never send that part to glance.nishilfaldu.site, so the site can't see which briefs you open.</p>
       <figure class="pv" id="pv-publish">
         <div class="pv-head"><span class="t">Rotate sessions across checkout <span>#42</span></span><span class="status">Open</span></div>
         <div class="pv-body">
