@@ -54,7 +54,7 @@ branch changes, and `branch.json` names the branch and the paths it deletes. Bui
 under `examples/`, then run glance there:
 
 ```sh
-node fixtures/build.mjs ledger
+npm run fixture ledger
 cd examples/ledger && glance
 ```
 

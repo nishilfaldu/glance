@@ -29,8 +29,11 @@ Options
 Publishing needs BLOB_READ_WRITE_TOKEN, the token of a public Vercel Blob store you own, or "blobToken"
 in ~/.config/glance/config.json. GLANCE_URL (or "url") picks the site that shows the page.`;
 
+const COMMANDS = ["open", "publish", "json"] as const;
+type Command = (typeof COMMANDS)[number];
+
 // "--pr" may stand alone (this branch's pull request) or take a number.
-const args = process.argv.slice(2).map((arg, i, all) => (arg === "--pr" && !/^\d+$/.test(all[i + 1] || "") ? "--pr=current" : arg));
+const args = process.argv.slice(2).map((arg, i, all) => (arg === "--pr" && !/^\d+$/.test(all[i + 1] ?? "") ? "--pr=current" : arg));
 
 const { values, positionals } = parseArgs({
   args,
@@ -47,9 +50,13 @@ const { values, positionals } = parseArgs({
   },
 });
 
-async function main() {
-  const command = positionals[0] || "open";
-  if (values.help || !["open", "publish", "json"].includes(command)) {
+function isCommand(name: string): name is Command {
+  return (COMMANDS as readonly string[]).includes(name);
+}
+
+async function main(): Promise<void> {
+  const command = positionals[0] ?? "open";
+  if (values.help || !isCommand(command)) {
     console.log(HELP);
     process.exit(values.help ? 0 : 1);
   }
@@ -64,7 +71,7 @@ async function main() {
     base: values.base,
     head: values.head,
     working: values.working,
-    title: values.title || (pull && pull.title),
+    title: values.title || pull?.title,
   });
 
   if (command === "json") {
@@ -95,7 +102,7 @@ async function main() {
   if (!values["no-open"]) openInBrowser(url);
 }
 
-main().catch((err) => {
-  console.error(`glance: ${err.message}`);
+main().catch((err: unknown) => {
+  console.error(`glance: ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
 });
