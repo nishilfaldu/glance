@@ -177,12 +177,7 @@
                   {
                     "name": "formatRelative()",
                     "kind": "fn",
-                    "state": "changed",
-                    "spot": 3,
-                    "flags": [
-                      "not connected to the main change"
-                    ],
-                    "stray": true
+                    "state": "changed"
                   }
                 ]
               }
@@ -206,12 +201,7 @@
                   {
                     "name": "apiFetch()",
                     "kind": "fn",
-                    "state": "changed",
-                    "spot": 4,
-                    "flags": [
-                      "not connected to the main change"
-                    ],
-                    "stray": true
+                    "state": "changed"
                   }
                 ]
               }
@@ -237,7 +227,7 @@
                   "src/auth/session.ts#createSession()",
                   "src/api/checkout.ts#handleCheckout()"
                 ],
-                "spot": 5,
+                "spot": 3,
                 "flags": [
                   "type or lint check bypassed",
                   "assertion removed"

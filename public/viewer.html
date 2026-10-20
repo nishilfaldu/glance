@@ -13,7 +13,7 @@
   :root {
     --bg: #ffffff; --surface: #ffffff; --fg: #171717; --muted: #666666; --faint: #a8a8a8;
     --line: #ebebeb; --chip: #f5f5f5; --risk: #a35200; --risk-bg: #fff4e5;
-    --stray: #0068d6; --stray-bg: #e9f4ff; --new: #107d32; --accent: #171717;
+    --new: #107d32; --accent: #171717;
     --sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
     color-scheme: light;
@@ -22,11 +22,11 @@
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
     --bg: #000000; --surface: #0a0a0a; --fg: #ededed; --muted: #a1a1a1; --faint: #575757;
     --line: #262626; --chip: #1a1a1a; --risk: #f5a524; --risk-bg: #261a06;
-    --stray: #52a8ff; --stray-bg: #0d1a2b; --new: #45d483; --accent: #ededed; color-scheme: dark } }
+    --new: #45d483; --accent: #ededed; color-scheme: dark } }
   :root[data-theme="dark"] {
     --bg: #000000; --surface: #0a0a0a; --fg: #ededed; --muted: #a1a1a1; --faint: #575757;
     --line: #262626; --chip: #1a1a1a; --risk: #f5a524; --risk-bg: #261a06;
-    --stray: #52a8ff; --stray-bg: #0d1a2b; --new: #45d483; --accent: #ededed; color-scheme: dark }
+    --new: #45d483; --accent: #ededed; color-scheme: dark }
 
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--sans);
@@ -76,7 +76,6 @@
   .fn.done::after { content: "✓"; font-size: 10px; color: var(--muted); }
   .new { width: 6px; height: 6px; border-radius: 50%; background: var(--new); flex: none; }
   .badge { font: 600 11px var(--mono); padding: 0 4px; border-radius: 4px; color: var(--risk); background: var(--risk-bg); }
-  .badge.stray { color: var(--stray); background: var(--stray-bg); }
   .ico { width: 16px; height: 16px; flex: none; }
   .fn .ico { width: 14px; height: 14px; }
 
@@ -264,7 +263,9 @@
       return '<span class="dir">' + icon("dir", color) + esc(name) + "/</span>";
     }
     function badge(x) {
-      return x.spot ? '<span class="badge' + (x.stray ? " stray" : "") + '">' + (marks[x.spot] || x.spot) + "</span>" : "";
+      // Briefs from before "not connected" was dropped still mark it; a spot with only that flag gets no badge.
+      if (!x.spot || (x.stray && (x.flags || []).length < 2)) return "";
+      return '<span class="badge">' + (marks[x.spot] || x.spot) + "</span>";
     }
     function newDot(x) { return x.state === "new" ? '<span class="new" title="new"></span>' : ""; }
     function fileHead(f) { return icon(f.icon) + esc(f.name) + newDot(f) + badge(f); }
@@ -514,7 +515,7 @@
     (function scan(dir) {
       (dir.files || []).forEach(function (f) {
         [f].concat(f.fns || []).forEach(function (x) {
-          if (x.spot) seen[x.stray ? "stray" : "risk"] = true;
+          if (badge(x)) seen.risk = true;
           if (x.state === "new") seen.new = true;
         });
         if (f.state === "skip") seen.skip = true;
@@ -523,7 +524,6 @@
     })(root);
     var keys = [
       ["risk", '<span class="badge">①</span>', "risky pattern"],
-      ["stray", '<span class="badge stray">①</span>', "not connected to the main change"],
       ["new", '<span class="new"></span>', "new"],
       ["skip", '<span class="skipped"></span>', "skipped"],
     ].filter(function (k) { return seen[k[0]]; });

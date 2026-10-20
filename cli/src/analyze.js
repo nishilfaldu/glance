@@ -136,8 +136,7 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
     }
   }
 
-  // 2. Calls, resolved through local names and imports. Every function in a changed code file takes part,
-  //    so a chain through an unchanged helper still connects. Only calls between touched functions are drawn.
+  // 2. Calls between touched functions, resolved through local names and imports.
   const depRecords = [...records.values()].filter((r) => r.kind === "dep");
   const recordByUnit = new Map([...records.values()].filter((r) => r.unit).map((r) => [r.unit, r]));
   const nodeId = (path, unit) => recordByUnit.get(unit)?.id || `${path}#${unit.name}@${unit.start}`;
@@ -163,13 +162,6 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
     return file ? findLocal(file, exported, exported === "default") : null;
   };
 
-  const neighbours = new Map();
-  const link = (a, b) => {
-    for (const [x, y] of [[a, b], [b, a]]) {
-      if (!neighbours.has(x)) neighbours.set(x, new Set());
-      neighbours.get(x).add(y);
-    }
-  };
   for (const [path, parsed] of code) {
     for (const unit of parsed.units) {
       const caller = nodeId(path, unit);
@@ -177,32 +169,11 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
         const callee = resolve(path, parsed.imports, call);
         if (!callee || callee === caller) continue;
         if (records.has(caller) && records.has(callee)) records.get(caller).calls.add(callee);
-        if (!TEST_FILE.test(path)) link(caller, callee); // tests connect everything, so they don't count
       }
     }
   }
 
-  // 3. Touched code with no call path to the main change: the largest group of touched code connected by calls.
-  const isCode = (r) => (r.kind === "fn" || r.kind === "route") && !TEST_FILE.test(r.path);
-  const touchedCode = [...records.values()].filter(isCode);
-  const seen = new Set();
-  let main = null;
-  for (const rec of touchedCode) {
-    if (seen.has(rec.id)) continue;
-    const group = new Set([rec.id]);
-    const queue = [rec.id];
-    while (queue.length) for (const n of neighbours.get(queue.shift()) || []) if (!group.has(n)) { group.add(n); queue.push(n); }
-    for (const id of group) seen.add(id);
-    const size = touchedCode.filter((r) => group.has(r.id)).length;
-    if (!main || size > main.size) main = { group, size };
-  }
-  if (main && main.size > 1) {
-    for (const rec of touchedCode) {
-      if (!main.group.has(rec.id)) { rec.stray = true; rec.flags.push("not connected to the main change"); }
-    }
-  }
-
-  // 4. The tree the viewer draws: every folder and its files, unchanged ones included.
+  // 3. The tree the viewer draws: every folder and its files, unchanged ones included.
   const tree = { name: basename(root), dirs: new Map(), files: [] };
   for (const path of headFiles) {
     const parts = path.split("/");
@@ -224,7 +195,6 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
       const fn = { name: r.name, kind: r.kind, state: r.state };
       if (r.calls.size) fn.calls = [...r.calls];
       if (r.flags.length) { fn.spot = ++spot; fn.flags = r.flags; }
-      if (r.stray) fn.stray = true;
       return fn;
     });
     return entry;
