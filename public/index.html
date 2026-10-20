@@ -225,7 +225,7 @@
 
     <section class="step" id="repo-map" data-pv="map">
       <h2>Repo map</h2>
-      <p>Shows every folder and file in the repo. Each changed file lists the functions the branch touched. Click a function to mark it reviewed.</p>
+      <p>Shows every folder and file in the repo. Each changed file lists the functions the branch touched. Switch to <strong>Changed only</strong> to hide everything the branch didn't touch. Click a function to mark it reviewed.</p>
       <figure class="pv tall" id="pv-map">
         <div class="pv-head"><span class="t">Rotate sessions across checkout <span>#42</span></span><span class="status">Live</span></div>
         <div class="pv-body frame"><iframe data-src="/r/sample?embed&amp;tab=map" title="Repo map of the example pull request" loading="lazy"></iframe></div>
@@ -388,8 +388,9 @@ M  src/auth/session.ts
 
     <section class="step" id="calls" data-pv="resolve">
       <h2>Connecting calls</h2>
-      <p>For each function, Glance records what it calls: <code>foo()</code>, <code>new Foo()</code>, <code>&lt;Foo /&gt;</code>, and <code>ns.foo()</code> when <code>ns</code> comes from <code>import * as ns</code>. It looks for each name in the same file first, then in the file's imports. For a relative import, it tries each file extension and the folder's <code>index</code> file. A package import points to that package's entry in the nearest <code>package.json</code>.</p>
-      <p>If both functions changed, the call graph draws an arrow between them. Calls like <code>db.insert()</code> aren't followed, because knowing what <code>db</code> is needs type information, and Glance doesn't run the type checker.</p>
+      <p>For each function, Glance records what it calls: <code>foo()</code>, <code>new Foo()</code>, <code>&lt;Foo /&gt;</code>, <code>ns.foo()</code> when <code>ns</code> comes from <code>import * as ns</code>, and functions passed by name, like <code>list.map(build)</code> or <code>onClick={save}</code>. It looks for each name in the same file first, then in the file's imports.</p>
+      <p>An import can be a relative path, a <code>paths</code> alias from the nearest <code>tsconfig.json</code> (like <code>@/lib</code>), or a package that lives in the same repo. Glance follows <code>export * from</code> and <code>export { … } from</code> to reach the function itself. Any other package points to its entry in the nearest <code>package.json</code>.</p>
+      <p>If both functions changed, the call graph draws an arrow between them. Glance stops at your own functions. It doesn't follow calls on objects like <code>db.insert()</code>, which usually go into a library or ORM.</p>
       <figure class="pv" id="pv-resolve">
         <div class="pv-head"><span class="t">checkout.ts <span>src/api</span></span></div>
         <div class="pv-body">
@@ -523,7 +524,7 @@ flags:
 
     <section class="step" id="limits" data-pv="help">
       <h2>Limits</h2>
-      <p>Glance only finds functions in TypeScript and JavaScript. It doesn't follow calls on objects (<code>db.insert()</code>), class methods, functions passed as callbacks, path aliases (<code>@/lib</code>), or imports between packages in a monorepo. Deleted files don't appear on the map.</p>
+      <p>Glance only finds functions in TypeScript and JavaScript. It doesn't follow calls on objects (<code>db.insert()</code>) or between class methods. Deleted files don't appear on the map.</p>
     </section>
 
   </main>
