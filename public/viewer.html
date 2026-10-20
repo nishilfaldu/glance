@@ -72,6 +72,9 @@
   .map .fn { white-space: normal; text-align: left; }
   .fn:focus-visible, .file.skip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .fn.sel, .file.sel { border-color: var(--accent); }
+  .flagged { cursor: pointer; }
+  .fhead.flagged.sel { outline: 1px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  .fhead.flagged:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
   .fn.done, .file.done, .fbox.done { opacity: .35; }
   .fn.done::after { content: "✓"; font-size: 10px; color: var(--muted); }
   .new { width: 6px; height: 6px; border-radius: 50%; background: var(--new); flex: none; }
@@ -317,6 +320,7 @@
       if (reviewable(f) && f.fns && f.fns.length) {
         files.push({ path: path, f: f });
         var box = el("div", "fbox", '<span class="fhead">' + fileHead(f) + '</span><span class="fns"></span>');
+        explainOnClick(box.firstChild, f, path);
         f.fns.forEach(function (fn) { box.lastChild.appendChild(fnChip(fn, path)); });
         track(path, box);
         return box;
@@ -419,6 +423,7 @@
         e = unitChip(n.path, null, n.file, n.path);
       } else if (n.file) {
         e = el("span", "file", fileHead(n.file));
+        explainOnClick(e, n.file, n.path);
         track(n.path, e);
       } else {
         e = el("span", null, dirLabel(n.name, n.color)).firstChild;
@@ -528,13 +533,13 @@
     }
     refreshDone();
 
-    // Legend: each rule that matched, by number, then the other markers this brief uses
+    // Legend: one entry for flags (selecting a flagged chip names its rule), then the other markers this brief uses
     var seen = {};
     eachEntry(root, function (x, f) {
       if (x.state === "new") seen.new = true;
       if (f.state === "skip") seen.skip = true;
     }, true);
-    var keys = rules.map(function (f) { return ['<span class="badge">' + (marks[ruleNo[f]] || ruleNo[f]) + "</span>", esc(f)]; });
+    var keys = rules.length ? [['<span class="badge">①</span>', "risky pattern"]] : [];
     if (seen.new) keys.push(['<span class="new"></span>', "new"]);
     if (seen.skip) keys.push(['<span class="skipped"></span>', "skipped"]);
     var legend = document.getElementById("legend");
@@ -549,10 +554,31 @@
       chip.classList.add("sel");
       strip.innerHTML = "<code>" + esc(path) + '</code><span class="hint">skipped by rule</span>';
     }
+    // The rule names behind a marker show in the strip when its chip is selected, not in the legend.
+    function flagNames(x) {
+      var names = ruleFlags(x);
+      return names.length ? '<span class="hint">' + esc(names.join(" · ")) + "</span>" : "";
+    }
+    // A file with functions is reviewed through them, but a flag on the file itself still needs a way to read it.
+    function explainOnClick(node, f, path) {
+      if (!ruleFlags(f).length) return;
+      node.classList.add("flagged");
+      node.tabIndex = 0;
+      node.setAttribute("role", "button");
+      function show() {
+        clearSel();
+        node.classList.add("sel");
+        strip.innerHTML = badge(f) + "<code>" + esc(path) + "</code>" + flagNames(f);
+      }
+      node.addEventListener("click", show);
+      node.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); show(); }
+      });
+    }
     function select(rid, item, label) {
       clearSel();
       chips[rid].forEach(function (c) { c.classList.add("sel"); });
-      strip.innerHTML = badge(item) + "<code>" + esc(label) + "</code>" +
+      strip.innerHTML = badge(item) + "<code>" + esc(label) + "</code>" + flagNames(item) +
         '<button type="button" id="mark">' + (done[rid] ? "Unmark" : "Mark reviewed") + "</button>";
       document.getElementById("mark").addEventListener("click", function () {
         done[rid] = !done[rid];
