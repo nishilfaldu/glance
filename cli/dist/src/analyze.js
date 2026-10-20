@@ -1,9 +1,10 @@
 // Builds a brief: the whole repo tree, the functions a branch touched, the calls between them, and the flags
 // from the repo's own rules in .glance.yml.
 import { basename } from "node:path";
-import { CODE_FILE, packageName, readCode, resolveImport, unitAt } from "./code.js";
+import { CODE_FILE, packageName, readCode, unitAt } from "./code.js";
 import { readGlanceYml } from "./config.js";
 import * as git from "./git.js";
+import { Modules } from "./modules.js";
 const TEST_FILE = /(^|\/)(__tests__|tests?|spec)\/|\.(test|spec)\.[cm]?[jt]sx?$/;
 const DEP_FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
 const MAX_UNCHANGED_SHOWN = 12;
@@ -148,34 +149,31 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
         }
         applyFlags(config.flags, path, diff, change, recordAt);
     }
-    // 2. Calls between touched functions, resolved through local names and imports.
+    // 2. Calls between touched functions, resolved through local names and imports: relative paths, tsconfig
+    //    aliases and packages in this repo land on files; other packages land on their dependency entry.
+    const modules = new Modules(fileSet, read, code);
     const depRecords = [...records.values()].filter((r) => r.kind === "dep");
     const recordByUnit = new Map();
     for (const r of records.values())
         if (r.unit)
             recordByUnit.set(r.unit, r);
-    const findLocal = (path, local, isDefault) => {
-        const unit = code.get(path)?.units.find((u) => (isDefault ? u.isDefault : u.local === local));
-        return unit ? (recordByUnit.get(unit)?.id ?? null) : null;
-    };
-    const resolve = (path, imports, call) => {
+    const idOf = (unit) => (unit ? (recordByUnit.get(unit)?.id ?? null) : null);
+    const resolve = (path, parsed, call) => {
         // "ns.fn" only resolves when ns is an `import * as ns`; other property calls stay unresolved.
         const [name = "", member] = call.split(".");
-        const imp = imports.get(name);
+        const imp = parsed.imports.get(name);
         if (member && imp?.imported !== "*")
             return null;
         if (!imp)
-            return findLocal(path, name, false);
+            return idOf(parsed.units.find((u) => u.local === name));
+        const file = modules.resolve(path, imp.source);
+        if (file)
+            return idOf(modules.exported(file, member ?? imp.imported));
         const pkg = packageName(imp.source);
-        if (pkg) {
-            const dep = depRecords
-                .filter((d) => d.name === pkg && path.startsWith(d.path.replace(/package\.json$/, "")))
-                .sort((a, b) => b.path.length - a.path.length)[0];
-            return dep?.id ?? null;
-        }
-        const file = resolveImport(path, imp.source, fileSet);
-        const exported = member ?? imp.imported;
-        return file ? findLocal(file, exported, exported === "default") : null;
+        const dep = depRecords
+            .filter((d) => d.name === pkg && path.startsWith(d.path.replace(/package\.json$/, "")))
+            .sort((a, b) => b.path.length - a.path.length)[0];
+        return dep?.id ?? null;
     };
     for (const [path, parsed] of code) {
         for (const unit of parsed.units) {
@@ -183,7 +181,7 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
             if (!caller)
                 continue;
             for (const call of unit.calls) {
-                const callee = resolve(path, parsed.imports, call);
+                const callee = resolve(path, parsed, call);
                 if (callee && callee !== caller.id)
                     caller.calls.add(callee);
             }

@@ -21,9 +21,16 @@ export interface Import {
   imported: string; // the exported name, "default", or "*" for a namespace import
 }
 
+// `export * from "./x"` (names: "*") or `export { a as b } from "./x"` (names: b -> a).
+export interface ReExport {
+  source: string;
+  names: "*" | Map<string, string>;
+}
+
 export interface ParsedCode {
   units: Unit[];
   imports: Map<string, Import>; // by local name
+  reexports: ReExport[];
 }
 
 type UnitHead = Omit<Unit, "start" | "end" | "calls">;
@@ -93,6 +100,16 @@ function callsIn(node: ts.Node): string[] {
   return targets.map(targetName).filter((name): name is string => name !== null);
 }
 
+function readReExport(node: ts.ExportDeclaration, reexports: ReExport[]): void {
+  if (!node.moduleSpecifier || !ts.isStringLiteral(node.moduleSpecifier)) return;
+  const source = node.moduleSpecifier.text;
+  if (!node.exportClause) reexports.push({ source, names: "*" });
+  else if (ts.isNamedExports(node.exportClause)) {
+    const names = new Map(node.exportClause.elements.map((el) => [el.name.text, (el.propertyName ?? el.name).text] as const));
+    reexports.push({ source, names });
+  }
+}
+
 function readImport(node: ts.ImportDeclaration, imports: Map<string, Import>): void {
   if (!ts.isStringLiteral(node.moduleSpecifier)) return;
   const source = node.moduleSpecifier.text;
@@ -108,7 +125,7 @@ function readImport(node: ts.ImportDeclaration, imports: Map<string, Import>): v
 export function readCode(path: string, text: string): ParsedCode {
   const sf = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, scriptKind(path));
   const lineOf = (pos: number) => sf.getLineAndCharacterOfPosition(pos).line + 1;
-  const parsed: ParsedCode = { units: [], imports: new Map() };
+  const parsed: ParsedCode = { units: [], imports: new Map(), reexports: [] };
 
   function visit(node: ts.Node, owner: Unit | null): void {
     const head = unitFor(node);
@@ -117,6 +134,7 @@ export function readCode(path: string, text: string): ParsedCode {
       parsed.units.push(owner);
     }
     if (ts.isImportDeclaration(node)) readImport(node, parsed.imports);
+    if (ts.isExportDeclaration(node)) readReExport(node, parsed.reexports);
     if (owner) for (const name of callsIn(node)) owner.calls.add(name);
     ts.forEachChild(node, (child) => visit(child, owner));
   }
@@ -138,21 +156,4 @@ export function packageName(source: string): string | null {
   if (source.startsWith(".") || source.startsWith("/")) return null;
   const parts = source.split("/");
   return source.startsWith("@") ? parts.slice(0, 2).join("/") : (parts[0] ?? null);
-}
-
-// Resolves a relative import to a file in the repo, or null.
-export function resolveImport(fromPath: string, source: string, files: Set<string>): string | null {
-  if (!source.startsWith(".")) return null;
-  const dir = fromPath.split("/").slice(0, -1);
-  for (const part of source.split("/")) {
-    if (part === "..") dir.pop();
-    else if (part !== ".") dir.push(part);
-  }
-  const base = dir.join("/");
-  const stem = base.replace(/\.(js|jsx|mjs|cjs)$/, "");
-  const candidates = [base];
-  for (const ext of ["ts", "tsx", "mts", "js", "jsx", "mjs", "cjs"]) {
-    candidates.push(`${stem}.${ext}`, `${base}/index.${ext}`);
-  }
-  return candidates.find((c) => files.has(c)) ?? null;
 }

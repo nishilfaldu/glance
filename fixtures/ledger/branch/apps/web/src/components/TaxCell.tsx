@@ -1,5 +1,5 @@
 import { Badge } from "./ui/Badge";
-import { formatMoney } from "../lib/format";
+import { formatMoney } from "@/lib/format";
 
 export function TaxCell({ amount, inclusive }: { amount: number; inclusive: boolean }) {
   return (

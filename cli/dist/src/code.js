@@ -70,6 +70,17 @@ function callsIn(node) {
     }
     return targets.map(targetName).filter((name) => name !== null);
 }
+function readReExport(node, reexports) {
+    if (!node.moduleSpecifier || !ts.isStringLiteral(node.moduleSpecifier))
+        return;
+    const source = node.moduleSpecifier.text;
+    if (!node.exportClause)
+        reexports.push({ source, names: "*" });
+    else if (ts.isNamedExports(node.exportClause)) {
+        const names = new Map(node.exportClause.elements.map((el) => [el.name.text, (el.propertyName ?? el.name).text]));
+        reexports.push({ source, names });
+    }
+}
 function readImport(node, imports) {
     if (!ts.isStringLiteral(node.moduleSpecifier))
         return;
@@ -88,7 +99,7 @@ function readImport(node, imports) {
 export function readCode(path, text) {
     const sf = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, scriptKind(path));
     const lineOf = (pos) => sf.getLineAndCharacterOfPosition(pos).line + 1;
-    const parsed = { units: [], imports: new Map() };
+    const parsed = { units: [], imports: new Map(), reexports: [] };
     function visit(node, owner) {
         const head = unitFor(node);
         if (head) {
@@ -97,6 +108,8 @@ export function readCode(path, text) {
         }
         if (ts.isImportDeclaration(node))
             readImport(node, parsed.imports);
+        if (ts.isExportDeclaration(node))
+            readReExport(node, parsed.reexports);
         if (owner)
             for (const name of callsIn(node))
                 owner.calls.add(name);
@@ -120,23 +133,4 @@ export function packageName(source) {
         return null;
     const parts = source.split("/");
     return source.startsWith("@") ? parts.slice(0, 2).join("/") : (parts[0] ?? null);
-}
-// Resolves a relative import to a file in the repo, or null.
-export function resolveImport(fromPath, source, files) {
-    if (!source.startsWith("."))
-        return null;
-    const dir = fromPath.split("/").slice(0, -1);
-    for (const part of source.split("/")) {
-        if (part === "..")
-            dir.pop();
-        else if (part !== ".")
-            dir.push(part);
-    }
-    const base = dir.join("/");
-    const stem = base.replace(/\.(js|jsx|mjs|cjs)$/, "");
-    const candidates = [base];
-    for (const ext of ["ts", "tsx", "mts", "js", "jsx", "mjs", "cjs"]) {
-        candidates.push(`${stem}.${ext}`, `${base}/index.${ext}`);
-    }
-    return candidates.find((c) => files.has(c)) ?? null;
 }

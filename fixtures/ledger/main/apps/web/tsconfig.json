@@ -1,0 +1,7 @@
+{
+  // the web app imports its own src/ through "@/"
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "paths": { "@/*": ["./src/*"] }
+  }
+}
