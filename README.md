@@ -9,7 +9,7 @@ changed functions connect.
 cd cli && npm install && npm link   # once
 
 glance                # open the review page for this branch in your browser
-glance publish        # upload it and print a secret link for the pull request
+glance publish        # upload it to your Vercel Blob store and print a link
 glance publish --pr   # …and put the link in this branch's PR description (via gh)
 glance --working      # include uncommitted changes (local review only)
 glance json           # print the brief as JSON
@@ -19,23 +19,30 @@ glance --help
 `glance` compares the current branch with the repo's default branch. It reads
 TS/JS with the TypeScript compiler to find the touched functions and the calls
 between them, and flags what its rules find (swallowed errors, removed
-assertions, hard-coded env fallbacks, type/lint escapes, changes with no call
-path to the main change). Files matching `skip:` patterns in `.glance.yml`,
+assertions, hard-coded env fallbacks, type/lint escapes). Files matching `skip:` patterns in `.glance.yml`,
 lockfiles and generated files are skipped.
 
-`glance publish` keeps one link per branch: publishing again updates the same
-page. It reads `GLANCE_PUBLISH_KEY` and `GLANCE_URL`, or
-`~/.config/glance/config.json`:
+Without setup, glance is local only. `glance publish` uploads the brief to a
+Vercel Blob store you own, so storage is on your account: create a **public**
+Blob store (a store's access can't change later) and set its
+`BLOB_READ_WRITE_TOKEN`, or put it in `~/.config/glance/config.json`:
 
 ```json
-{ "url": "https://glance-mu-three.vercel.app", "publishKey": "…" }
+{ "blobToken": "vercel_blob_rw_…", "url": "https://glance-mu-three.vercel.app" }
 ```
+
+`url` (or `GLANCE_URL`) is the site that shows the page; it defaults to the one
+above. Publishing keeps one link per branch: publishing again updates the same
+page within a minute.
 
 ## Site
 
-- `public/viewer.html` renders a brief at `/r/<id>`; `/r/sample` shows `public/sample.json`.
-- `POST /api/brief` stores a brief in private Vercel Blob storage (needs the publish key).
-- `GET /api/brief/<id>` reads it back.
+The site is static: no API and no storage of its own.
+
+- `public/viewer.html` renders a published brief at `/r#<store>/<id>`, loading
+  `glance/<id>.json` from that public Blob store. The part after `#` is never
+  sent to the site.
+- `/r/sample` shows `public/sample.json`.
 
 Links are secret URLs: 128-bit random ids, not indexed by search engines.
 Pushes to `main` deploy to Vercel.

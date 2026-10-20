@@ -3,13 +3,14 @@ import { parseArgs } from "node:util";
 import { analyze } from "../src/analyze.js";
 import { publishSettings, saveId, savedId } from "../src/config.js";
 import { findPullRequest, linkOnPullRequest } from "../src/pr.js";
+import { publishBrief } from "../src/publish.js";
 import { openInBrowser, serveLocally } from "../src/serve.js";
 
 const HELP = `glance: map a branch's changes for review
 
 Usage
   glance [options]           Open the review page for this branch in your browser
-  glance publish [options]   Upload it and print a secret link for the pull request
+  glance publish [options]   Upload it to your Vercel Blob store and print a link for the pull request
   glance json [options]      Print the brief as JSON
 
 Options
@@ -25,7 +26,8 @@ Options
   --no-open        Start the local page without opening a browser
   -h, --help       Show this help
 
-Publishing reads GLANCE_PUBLISH_KEY and GLANCE_URL, or ~/.config/glance/config.json.`;
+Publishing needs BLOB_READ_WRITE_TOKEN, the token of a public Vercel Blob store you own, or "blobToken"
+in ~/.config/glance/config.json. GLANCE_URL (or "url") picks the site that shows the page.`;
 
 // "--pr" may stand alone (this branch's pull request) or take a number.
 const args = process.argv.slice(2).map((arg, i, all) => (arg === "--pr" && !/^\d+$/.test(all[i + 1] || "") ? "--pr=current" : arg));
@@ -73,20 +75,16 @@ async function main() {
   console.error(`${brief.head} → ${brief.base}: ${stats.files} files, ${stats.functions} functions, ${stats.flags} flagged`);
 
   if (command === "publish") {
-    const { url, publishKey, configPath } = publishSettings();
-    if (!publishKey) throw new Error(`No publish key. Set GLANCE_PUBLISH_KEY or add "publishKey" to ${configPath}.`);
-    const id = savedId(root, brief.head);
-    const res = await fetch(`${url}/api/brief`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${publishKey}` },
-      body: JSON.stringify(id ? { id, brief } : { brief }),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(`Publish failed (${res.status}): ${body.error || "no details"}`);
-    saveId(root, brief.head, body.id);
-    console.log(body.url);
+    const { url, blobToken, configPath } = publishSettings();
+    if (!blobToken) {
+      throw new Error(`Publishing uploads to your own Vercel Blob store. Set BLOB_READ_WRITE_TOKEN (from a public store) ` +
+        `or add "blobToken" to ${configPath}. Without one, run glance to review locally.`);
+    }
+    const published = await publishBrief(brief, { id: savedId(root, brief.head), token: blobToken, siteUrl: url });
+    saveId(root, brief.head, published.id);
+    console.log(published.url);
     if (pull) {
-      linkOnPullRequest(cwd, pull, body.url);
+      linkOnPullRequest(cwd, pull, published.url);
       console.error(`Linked on ${pull.url}`);
     }
     return;

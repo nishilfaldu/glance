@@ -5,14 +5,15 @@ import { gitDir } from "./git.js";
 
 const DEFAULT_URL = "https://glance-mu-three.vercel.app";
 
-// Publish settings come from env vars first, then ~/.config/glance/config.json.
+// Publish settings come from env vars first, then ~/.config/glance/config.json. Briefs go to the publisher's
+// own Vercel Blob store (BLOB_READ_WRITE_TOKEN); the Glance site at url only serves the viewer.
 export function publishSettings() {
   let file = {};
   const path = join(homedir(), ".config", "glance", "config.json");
   if (existsSync(path)) file = JSON.parse(readFileSync(path, "utf8"));
   return {
     url: (process.env.GLANCE_URL || file.url || DEFAULT_URL).replace(/\/+$/, ""),
-    publishKey: process.env.GLANCE_PUBLISH_KEY || file.publishKey || null,
+    blobToken: process.env.BLOB_READ_WRITE_TOKEN || file.blobToken || null,
     configPath: path,
   };
 }

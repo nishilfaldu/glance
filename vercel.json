@@ -3,6 +3,7 @@
   "buildCommand": "",
   "outputDirectory": "public",
   "rewrites": [
+    { "source": "/r", "destination": "/viewer.html" },
     { "source": "/r/:id", "destination": "/viewer.html" }
   ],
   "headers": [
