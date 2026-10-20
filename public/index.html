@@ -327,11 +327,17 @@
         <div class="pv-body">
           <div class="stack">
             <div class="term"><span class="p">$ </span>git diff --name-status -M 88fc5ed HEAD
-M  docs/sessions.md      <span class="o">skip: .glance.yml</span>
-M  generated/client.ts   <span class="o">skip: .glance.yml</span>
+M  docs/sessions.md           <span class="o">skip: .glance.yml</span>
+M  generated/client.ts        <span class="o">skip: .glance.yml</span>
+M  package.json
+M  src/api/checkout.ts
+M  src/api/routes.ts
 A  src/auth/refresh.ts
 M  src/auth/session.ts
-<span class="o">… 7 more</span></div>
+M  src/utils/date.ts
+M  src/web/sessionClient.ts
+M  tests/checkout.test.ts
+M  tests/session.test.ts</div>
             <div class="term"><span class="p">$ </span>git diff -U0 88fc5ed HEAD -- src/auth/session.ts
 <span class="h">@@ -7,0 +9 @@</span>  <span class="o">nothing removed, 1 added at line 9</span>
 <span class="a">+  rotatedFrom?: string;</span>
