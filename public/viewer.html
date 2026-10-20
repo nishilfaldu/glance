@@ -6,6 +6,8 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="data:,">
 <title>Glance</title>
+<!-- ?embed: shown inside the docs page, which supplies the title, frame and theme switch; ?tab=map|calls picks the first tab -->
+<script>var params = new URLSearchParams(location.search); if (params.has("embed")) document.documentElement.classList.add("embed");</script>
 <script>try { var t = localStorage.getItem("glance-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap">
 <style>
@@ -131,6 +133,12 @@
     border: 0; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
   .strip button:hover { opacity: .85; }
   .strip button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  /* Embedded in the docs: the docs card is the frame */
+  .embed body { padding: 0; background: transparent; }
+  .embed .head { display: none; }
+  .embed .wrap { max-width: none; }
+  .embed .card { border: 0; border-radius: 0; background: transparent; padding: 6px 26px 22px; }
 
   @media (max-width: 520px) {
     .row { grid-template-columns: 1fr; gap: 4px; }
@@ -479,6 +487,8 @@
       graph.style.width = width + 16 + "px";
       graph.style.height = rows * ROW + "px";
       graph.insertBefore(svg, graph.firstChild);
+      // In the docs pane the graph is wider than the frame: start on the functions and their calls.
+      if (params.has("embed")) graph.parentNode.scrollLeft = graph.parentNode.scrollWidth;
     }
     function hoverFocus(e, box, fid) {
       e.addEventListener("mouseenter", function () { focusCalls(box, fid); });
@@ -500,6 +510,7 @@
         document.getElementById("panel-" + t.dataset.tab).hidden = !on;
       });
       if (drawers[name]) drawers[name]();
+      if (params.has("embed")) return; // the docs page shouldn't change which tab your own briefs open on
       try { localStorage.setItem("glance-tab", name); } catch (e) {}
     }
     tabs.forEach(function (t, i) {
@@ -512,8 +523,8 @@
         showTab(next.dataset.tab);
       });
     });
-    var saved = null;
-    try { saved = localStorage.getItem("glance-tab"); } catch (e) {}
+    var saved = params.get("tab");
+    if (!saved) try { saved = localStorage.getItem("glance-tab"); } catch (e) {}
     showTab(tabs.some(function (t) { return t.dataset.tab === saved; }) ? saved : "map");
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (drawers[current]) drawers[current](); });
 
