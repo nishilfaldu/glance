@@ -1,8 +1,22 @@
 {
   "name": "glance",
+  "version": "0.1.0",
   "private": true,
+  "description": "Turn a branch into a Glance review map, locally or as a secret link",
   "type": "module",
+  "bin": {
+    "glance": "cli/bin/glance.js"
+  },
+  "files": [
+    "cli/bin",
+    "cli/src",
+    "public/viewer.html"
+  ],
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "@vercel/blob": "2.8.2",
+    "typescript": "5.6.3"
   }
 }

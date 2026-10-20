@@ -6,7 +6,7 @@ changed functions connect.
 ## CLI
 
 ```sh
-cd cli && npm install && npm link   # once
+npm install -g github:nishilfaldu/glance   # once; or `npm install && npm link` in a clone
 
 glance                # open the review page for this branch in your browser
 glance publish        # upload it to your Vercel Blob store and print a link
