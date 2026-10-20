@@ -7,49 +7,50 @@
 <link rel="icon" href="data:,">
 <title>Glance</title>
 <script>try { var t = localStorage.getItem("glance-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap">
 <style>
   /* Layout: two tabs — repo map (whole-repo minimap) and call graph (affected paths down to functions + calls), same chips in both */
+  /* Same soft palette as the docs (public/index.html): near-black text, hairline borders, amber only for flags */
   :root {
-    --bg: #ffffff; --surface: #ffffff; --fg: #171717; --muted: #666666; --faint: #a8a8a8;
-    --line: #ebebeb; --chip: #f5f5f5; --risk: #a35200; --risk-bg: #fff4e5;
-    --new: #107d32; --accent: #171717;
-    --sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
-    --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --bg: #ffffff; --surface: #ffffff; --fg: #1f1f1f; --muted: #6b6b6b; --faint: #a6a6a6;
+    --line: #ececec; --chip: #f4f4f3; --band: #f6f6f5; --risk: #c47a0e; --risk-bg: #fff5e3; --risk-dot: #efb02f;
+    --new: #2e9b55; --accent: #1f1f1f;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
     color-scheme: light;
   }
   /* Dark follows the system unless the theme switch picked one; the two blocks below must stay identical */
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-    --bg: #000000; --surface: #0a0a0a; --fg: #ededed; --muted: #a1a1a1; --faint: #575757;
-    --line: #262626; --chip: #1a1a1a; --risk: #f5a524; --risk-bg: #261a06;
-    --new: #45d483; --accent: #ededed; color-scheme: dark } }
+    --bg: #161616; --surface: #1b1b1b; --fg: #ececec; --muted: #a3a3a3; --faint: #6c6c6c;
+    --line: #2a2a2a; --chip: #252525; --band: #222222; --risk: #f2b441; --risk-bg: #2f2512; --risk-dot: #efb02f;
+    --new: #5fd28f; --accent: #ececec; color-scheme: dark } }
   :root[data-theme="dark"] {
-    --bg: #000000; --surface: #0a0a0a; --fg: #ededed; --muted: #a1a1a1; --faint: #575757;
-    --line: #262626; --chip: #1a1a1a; --risk: #f5a524; --risk-bg: #261a06;
-    --new: #45d483; --accent: #ededed; color-scheme: dark }
+    --bg: #161616; --surface: #1b1b1b; --fg: #ececec; --muted: #a3a3a3; --faint: #6c6c6c;
+    --line: #2a2a2a; --chip: #252525; --band: #222222; --risk: #f2b441; --risk-bg: #2f2512; --risk-dot: #efb02f;
+    --new: #5fd28f; --accent: #ececec; color-scheme: dark }
 
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--sans);
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased;
     padding-block: 32px 48px;
     padding-left: max(16px, env(safe-area-inset-left, 0px));
     padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   [hidden] { display: none !important; }
   .wrap { max-width: 1200px; margin: 0 auto; display: grid; gap: 16px; }
-  h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; margin: 0; text-wrap: balance; }
+  h1 { font-size: 26px; font-weight: 500; letter-spacing: -0.025em; line-height: 1.25; margin: 0; text-wrap: balance; }
   .branch { font: 13px var(--mono); color: var(--muted); }
   .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-  .themes { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 999px; flex: none; }
-  .themes button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 999px;
-    background: none; color: var(--muted); cursor: pointer; }
+  .themes { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--chip); flex: none; }
+  .themes button { display: grid; place-items: center; width: 28px; height: 26px; padding: 0; border: 0; border-radius: 999px;
+    background: none; color: var(--faint); cursor: pointer; }
   .themes button:hover { color: var(--fg); }
-  .themes button[aria-pressed="true"] { background: var(--chip); color: var(--fg); }
+  .themes button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
   .themes button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .themes svg { width: 15px; height: 15px; }
-  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
-    padding: 20px 24px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; min-width: 0; }
+  .themes svg { width: 14px; height: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px;
+    padding: 20px 26px 24px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; min-width: 0; }
   .label { font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: 10px; }
   .tabs { display: flex; gap: 4px; margin: -8px 0 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
-  .tabs button { font: 500 13.5px var(--sans); color: var(--muted); background: none; border: 0; border-bottom: 2px solid transparent;
+  .tabs button { font: 500 14px var(--sans); color: var(--muted); background: none; border: 0; border-bottom: 2px solid transparent;
     margin-bottom: -1px; padding: 8px 10px 10px; cursor: pointer; white-space: nowrap; }
   .tabs button:hover { color: var(--fg); }
   .tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--fg); }
@@ -60,14 +61,14 @@
   /* Shared chips */
   .dir { display: inline-flex; align-items: center; gap: 5px; font: 500 12.5px var(--mono); color: var(--muted); padding: 3px 0; white-space: nowrap; }
   .file { display: inline-flex; align-items: center; gap: 5px; font: 12.5px var(--mono);
-    padding: 3px 7px; border-radius: 5px; border: 1px solid transparent; background: var(--chip);
+    padding: 3px 8px; border-radius: 8px; border: 1px solid transparent; background: var(--chip);
     color: var(--fg); white-space: nowrap; }
   .file.same { background: none; color: var(--faint); }
   /* Color is for what changed: unchanged files and folders get gray icons */
   .file.same .ico, .quiet > .dir .ico, .folded .ico { filter: grayscale(1); opacity: .45; }
   .file.skip { background: none; border-style: dashed; border-color: var(--line); color: var(--faint); cursor: pointer; }
-  .fn { display: inline-flex; align-items: center; gap: 5px; font: 11.5px var(--mono); padding: 2px 7px;
-    border-radius: 5px; border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+  .fn { display: inline-flex; align-items: center; gap: 5px; font: 11.5px var(--mono); padding: 2px 8px;
+    border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--fg);
     white-space: nowrap; cursor: pointer; max-width: 100%; }
   .map .fn { white-space: normal; text-align: left; }
   .fn:focus-visible, .file.skip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -77,8 +78,9 @@
   .fhead.flagged:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
   .fn.done, .file.done, .fbox.done { opacity: .35; }
   .fn.done::after { content: "✓"; font-size: 10px; color: var(--muted); }
-  .new { width: 6px; height: 6px; border-radius: 50%; background: var(--new); flex: none; }
-  .badge { font: 600 11px var(--mono); padding: 0 4px; border-radius: 4px; color: var(--risk); background: var(--risk-bg); }
+  .new { width: 7px; height: 7px; border-radius: 50%; background: var(--new); flex: none; }
+  .badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; flex: none;
+    font: 500 11px var(--sans); color: var(--risk); background: var(--risk-bg); border: 1px solid color-mix(in srgb, var(--risk-dot) 45%, transparent); }
   .ico { width: 16px; height: 16px; flex: none; }
   .fn .ico { width: 14px; height: 14px; }
 
@@ -87,18 +89,18 @@
   .row { display: grid; grid-template-columns: 104px 1fr; gap: 10px; align-items: start; }
   .groups { display: flex; flex-direction: column; gap: 6px; min-width: 0; align-items: flex-start; }
   .line { display: flex; flex-wrap: wrap; gap: inherit; align-items: flex-start; min-width: 0; max-width: 100%; }
-  .group { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px 6px;
-    border: 1px solid var(--line); border-radius: 6px; min-width: 0; }
+  .group { display: flex; flex-direction: column; gap: 4px; padding: 6px 10px 8px;
+    border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
   .group .files { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; min-width: 0; }
   .group > .dir { color: var(--fg); font-weight: 600; padding: 1px 0; }
   .group.quiet { border-color: transparent; }
   .group.quiet > .dir { color: var(--muted); font-weight: 500; }
-  .fbox { display: inline-flex; flex-direction: column; gap: 4px; padding: 3px 7px 5px; border-radius: 6px; background: var(--chip); min-width: 0; max-width: 100%; }
+  .fbox { display: inline-flex; flex-direction: column; gap: 4px; padding: 4px 8px 6px; border-radius: 10px; background: var(--chip); min-width: 0; max-width: 100%; }
   .fbox .fhead { display: inline-flex; align-items: center; gap: 5px; font: 12.5px var(--mono); }
   .fbox .fns { display: flex; flex-wrap: wrap; gap: 3px; padding-left: 21px; }
   .file.solo { cursor: pointer; }
   .folded { display: inline-flex; align-items: center; gap: 5px; font: 12.5px var(--mono); color: var(--faint);
-    padding: 3px 7px; border: 1px dashed var(--line); border-radius: 5px; white-space: nowrap; }
+    padding: 3px 8px; border: 1px dashed var(--line); border-radius: 8px; white-space: nowrap; }
   .folded .count, .more { font: 11.5px var(--mono); color: var(--faint); }
   .more { padding: 3px 4px; align-self: center; }
 
@@ -122,11 +124,12 @@
   .legend .skipped { width: 18px; height: 12px; flex: none; border: 1px dashed var(--faint); border-radius: 3px; }
 
   .strip { position: sticky; bottom: max(8px, env(safe-area-inset-bottom, 0px)); display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 34px;
-    padding: 6px 10px; border-radius: 6px; background: var(--chip); border: 1px solid var(--line); font-size: 13px; }
+    padding: 6px 6px 6px 16px; border-radius: 999px; background: var(--chip); font-size: 13px; }
   .strip .hint { color: var(--muted); }
   .strip code { font: 12.5px var(--mono); }
-  .strip button { margin-left: auto; font: 500 12.5px var(--sans); color: var(--fg); background: var(--surface);
-    border: 1px solid var(--line); border-radius: 5px; padding: 3px 10px; cursor: pointer; }
+  .strip button { margin-left: auto; font: 500 13px var(--sans); color: var(--bg); background: var(--fg);
+    border: 0; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  .strip button:hover { opacity: .85; }
   .strip button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   @media (max-width: 520px) {
@@ -216,7 +219,6 @@
     });
   })();
 
-  var marks = ["", "①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨"];
   var kindIcon = { fn: "fn", case: "case", route: "route", dep: "dep" };
 
   // Where the brief comes from: /r#<store>/<id> was published to the publisher's own public Vercel Blob store;
@@ -285,7 +287,7 @@
     }, true);
     function badge(x) {
       return ruleFlags(x).map(function (f) {
-        return '<span class="badge" title="' + esc(f) + '">' + (marks[ruleNo[f]] || ruleNo[f]) + "</span>";
+        return '<span class="badge" title="' + esc(f) + '">' + ruleNo[f] + "</span>";
       }).join("");
     }
     function newDot(x) { return x.state === "new" ? '<span class="new" title="new"></span>' : ""; }
@@ -539,7 +541,7 @@
       if (x.state === "new") seen.new = true;
       if (f.state === "skip") seen.skip = true;
     }, true);
-    var keys = rules.length ? [['<span class="badge">①</span>', "risky pattern"]] : [];
+    var keys = rules.length ? [['<span class="badge">1</span>', "risky pattern"]] : [];
     if (seen.new) keys.push(['<span class="new"></span>', "new"]);
     if (seen.skip) keys.push(['<span class="skipped"></span>', "skipped"]);
     var legend = document.getElementById("legend");
