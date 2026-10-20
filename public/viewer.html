@@ -111,6 +111,8 @@
   .file.solo { cursor: pointer; }
 
   /* Graph */
+  .note { margin: -6px 0 0; font-size: 13px; color: var(--muted); }
+  .note code { font: 12.5px var(--mono); color: var(--fg); }
   .graph-scroll { overflow-x: auto; }
   .graph { position: relative; }
   .graph svg.links { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
@@ -205,6 +207,7 @@
     </section>
 
     <section class="panel" role="tabpanel" id="panel-calls" aria-labelledby="tab-calls" hidden>
+      <p class="note" id="graph-note"></p>
       <div class="graph-scroll"><div class="graph" id="graph"></div></div>
     </section>
 
@@ -399,7 +402,7 @@
     try { savedView = localStorage.getItem("glance-map-view"); } catch (e) {}
     showView(savedView === "changed" ? "changed" : "all");
 
-    // Call graph: only paths that lead to touched files, from their common parent
+    // Call graph: only the paths to changed files, starting from the deepest folder they all share
     var GAP = 34, ROW = 36;
     function affected(dir, prefix, depth) {
       var fileKids = [], dirKids = [];
@@ -413,10 +416,21 @@
         if (child.kids.length) dirKids.push(child);
       });
       // Same order as the minimap: root files come last, inside folders files come first.
-      var kids = depth === 0 ? dirKids.concat(fileKids) : fileKids.concat(dirKids);
+      var kids = depth === 0 && !prefix ? dirKids.concat(fileKids) : fileKids.concat(dirKids);
       return { name: dir.name, color: dir.color || "#78909c", depth: depth, kids: kids };
     }
-    var tree = affected({ name: data.repo, files: root.files, dirs: root.dirs }, "", 0);
+    function leadsToChange(dir) { return (dir.files || []).some(reviewable) || (dir.dirs || []).some(leadsToChange); }
+    var start = { name: data.repo, files: root.files, dirs: root.dirs }, startPath = "";
+    for (;;) {
+      var live = (start.dirs || []).filter(leadsToChange);
+      if ((start.files || []).some(reviewable) || live.length !== 1) break;
+      start = live[0];
+      startPath = join(startPath, start.name);
+    }
+    var tree = affected({ name: startPath || data.repo, color: start.color, files: start.files, dirs: start.dirs }, startPath, 0);
+    document.getElementById("graph-note").innerHTML = startPath
+      ? "Changed files only, starting from <code>" + esc(startPath) + "/</code>, the folder they all share."
+      : "Changed files only, starting from the repo root.";
     var maxDir = 0;
     (function deepest(n) { if (!n.file && !n.fn) { maxDir = Math.max(maxDir, n.depth); n.kids.forEach(deepest); } })(tree);
     var FILE_DEPTH = maxDir + 1, FN_DEPTH = maxDir + 2;
