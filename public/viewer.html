@@ -15,7 +15,7 @@
   /* Same soft palette as the docs (public/index.html): near-black text, hairline borders, amber only for flags */
   :root {
     --bg: #ffffff; --surface: #ffffff; --fg: #1f1f1f; --muted: #6b6b6b; --faint: #a6a6a6;
-    --line: #ececec; --chip: #f4f4f3; --band: #f6f6f5; --risk: #c47a0e; --risk-bg: #fff5e3; --risk-dot: #efb02f;
+    --line: #ececec; --chip: #f4f4f3; --risk: #c47a0e; --risk-bg: #fff5e3; --risk-dot: #efb02f;
     --new: #2e9b55; --accent: #1f1f1f;
     --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
@@ -24,11 +24,11 @@
   /* Dark follows the system unless the theme switch picked one; the two blocks below must stay identical */
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
     --bg: #161616; --surface: #1b1b1b; --fg: #ececec; --muted: #a3a3a3; --faint: #6c6c6c;
-    --line: #2a2a2a; --chip: #252525; --band: #222222; --risk: #f2b441; --risk-bg: #2f2512; --risk-dot: #efb02f;
+    --line: #2a2a2a; --chip: #252525; --risk: #f2b441; --risk-bg: #2f2512; --risk-dot: #efb02f;
     --new: #5fd28f; --accent: #ececec; color-scheme: dark } }
   :root[data-theme="dark"] {
     --bg: #161616; --surface: #1b1b1b; --fg: #ececec; --muted: #a3a3a3; --faint: #6c6c6c;
-    --line: #2a2a2a; --chip: #252525; --band: #222222; --risk: #f2b441; --risk-bg: #2f2512; --risk-dot: #efb02f;
+    --line: #2a2a2a; --chip: #252525; --risk: #f2b441; --risk-bg: #2f2512; --risk-dot: #efb02f;
     --new: #5fd28f; --accent: #ececec; color-scheme: dark }
 
   * { box-sizing: border-box; }
@@ -50,7 +50,6 @@
   .themes svg { width: 14px; height: 14px; }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px;
     padding: 20px 26px 24px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; min-width: 0; }
-  .label { font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: 10px; }
   .tabs { display: flex; gap: 4px; margin: -8px 0 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
   .tabs button { font: 500 14px var(--sans); color: var(--muted); background: none; border: 0; border-bottom: 2px solid transparent;
     margin-bottom: -1px; padding: 8px 10px 10px; cursor: pointer; white-space: nowrap; }
@@ -203,12 +202,8 @@
 </div>
 
 <script>
-  // Brief data shape: { repo, title, head, base, root }.
-  // A folder is { name, color, files, dirs, more? }. Briefs from before every folder was listed may hold
-  // { name, color, collapsed: true, count } for folders where nothing changed.
-  // File state: "changed" | "new" | "same" | "skip". Changed files list fns; a changed file with no fns is reviewed as a whole.
-  // Function kind: fn | case (test) | route | dep; state: "new" | "changed".
-  // calls: ids ("path#name") of touched functions this one calls. spot: number shown on the file or function.
+  // The brief's shape is typed in cli/src/brief.ts. Briefs published before the current shape may also hold
+  // { collapsed: true, count } folders, "spot" numbers and a "not connected" flag; the code below copes with all three.
   // Theme: system (no attribute on <html>), light or dark; an explicit pick is remembered in this browser
   (function () {
     var buttons = document.querySelectorAll("#themes button");

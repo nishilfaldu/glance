@@ -108,7 +108,6 @@
                     "calls": [
                       "src/auth/session.ts#rotateSession()"
                     ],
-                    "spot": 1,
                     "flags": [
                       "error swallowed"
                     ]
@@ -119,7 +118,6 @@
                 "name": "session.ts",
                 "icon": "ts",
                 "state": "changed",
-                "spot": 2,
                 "flags": [
                   "env var with a hard-coded fallback"
                 ],
@@ -227,7 +225,6 @@
                   "src/auth/session.ts#createSession()",
                   "src/api/checkout.ts#handleCheckout()"
                 ],
-                "spot": 3,
                 "flags": [
                   "type or lint check bypassed",
                   "assertion removed"
