@@ -388,9 +388,9 @@ M  src/auth/session.ts
 
     <section class="step" id="calls" data-pv="resolve">
       <h2>Connecting calls</h2>
-      <p>For each function, Glance records what it calls: <code>foo()</code>, <code>new Foo()</code>, <code>&lt;Foo /&gt;</code>, <code>ns.foo()</code> when <code>ns</code> comes from <code>import * as ns</code>, and functions passed by name, like <code>list.map(build)</code> or <code>onClick={save}</code>. It looks for each name in the same file first, then in the file's imports.</p>
+      <p>For each function, Glance records what it calls: <code>foo()</code>, <code>new Foo()</code>, <code>&lt;Foo /&gt;</code>, <code>ns.foo()</code> when <code>ns</code> comes from <code>import * as ns</code>, class methods (<code>this.save()</code>, <code>new Cart().total()</code>, or <code>cart.total()</code> after <code>const cart = new Cart()</code>), and functions passed by name, like <code>list.map(build)</code> or <code>onClick={save}</code>. It looks for each name in the same file first, then in the file's imports.</p>
       <p>An import can be a relative path, a <code>paths</code> alias from the nearest <code>tsconfig.json</code> (like <code>@/lib</code>), or a package that lives in the same repo. Glance follows <code>export * from</code> and <code>export { … } from</code> to reach the function itself. Any other package points to its entry in the nearest <code>package.json</code>.</p>
-      <p>If both functions changed, the call graph draws an arrow between them. Glance stops at your own functions. It doesn't follow calls on objects like <code>db.insert()</code>, which usually go into a library or ORM.</p>
+      <p>If both functions changed, the call graph draws an arrow between them. Glance stops at your own code. It doesn't follow calls into a package from outside the repo, or calls on objects like <code>db.insert()</code>, which usually go into a library or ORM.</p>
       <figure class="pv" id="pv-resolve">
         <div class="pv-head"><span class="t">checkout.ts <span>src/api</span></span></div>
         <div class="pv-body">
@@ -524,7 +524,7 @@ flags:
 
     <section class="step" id="limits" data-pv="help">
       <h2>Limits</h2>
-      <p>Glance only finds functions in TypeScript and JavaScript. It doesn't follow calls on objects (<code>db.insert()</code>) or between class methods. Deleted files don't appear on the map.</p>
+      <p>Glance only finds functions in TypeScript and JavaScript. It doesn't follow calls on objects it can't trace back to a class in the repo (<code>db.insert()</code>), or into packages from outside the repo. Deleted files don't appear on the map.</p>
     </section>
 
   </main>
