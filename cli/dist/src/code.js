@@ -46,20 +46,29 @@ function unitFor(node) {
     }
     return null;
 }
-// What a call or JSX element calls: "name", or "ns.name" for `ns.name()` (only resolved through `import * as ns`).
-function calleeName(node) {
-    let callee = null;
-    if (ts.isCallExpression(node) || ts.isNewExpression(node))
-        callee = node.expression;
-    else if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node))
-        callee = node.tagName;
-    if (!callee)
-        return null;
-    if (ts.isIdentifier(callee))
-        return callee.text;
-    if (ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression))
-        return `${callee.expression.text}.${callee.name.text}`;
+// "name", or "ns.name" for `ns.name` (only resolved through `import * as ns`).
+function targetName(expr) {
+    if (ts.isIdentifier(expr))
+        return expr.text;
+    if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.expression))
+        return `${expr.expression.text}.${expr.name.text}`;
     return null;
+}
+// What a node calls: the callee of a call, `new` or JSX element, plus functions handed over by name as an
+// argument (`list.map(build)`) or a JSX prop (`onClick={save}`). Names that aren't functions resolve to nothing.
+function callsIn(node) {
+    const targets = [];
+    if (ts.isCallExpression(node) || ts.isNewExpression(node))
+        targets.push(node.expression, ...(node.arguments ?? []));
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+        targets.push(node.tagName);
+        for (const attr of node.attributes.properties) {
+            if (ts.isJsxAttribute(attr) && attr.initializer && ts.isJsxExpression(attr.initializer) && attr.initializer.expression) {
+                targets.push(attr.initializer.expression);
+            }
+        }
+    }
+    return targets.map(targetName).filter((name) => name !== null);
 }
 function readImport(node, imports) {
     if (!ts.isStringLiteral(node.moduleSpecifier))
@@ -88,9 +97,9 @@ export function readCode(path, text) {
         }
         if (ts.isImportDeclaration(node))
             readImport(node, parsed.imports);
-        const called = owner && calleeName(node);
-        if (owner && called)
-            owner.calls.add(called);
+        if (owner)
+            for (const name of callsIn(node))
+                owner.calls.add(name);
         ts.forEachChild(node, (child) => visit(child, owner));
     }
     visit(sf, null);
