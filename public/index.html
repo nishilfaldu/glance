@@ -70,6 +70,7 @@
   main p strong { color: var(--fg); font-weight: 500; }
   .list { margin: 0 0 12px; padding-left: 20px; color: var(--muted); }
   .list li { margin: 4px 0; }
+  .nums { display: inline-flex; gap: 6px; }
   .step { scroll-margin-top: 40px; }
   .step + .step { margin-top: 72px; }
   .step.first { margin-top: 0; }
@@ -211,7 +212,7 @@
 
     <section class="step first" id="top" data-pv="map">
       <h1>Map your pull request</h1>
-      <p class="lede">Glance shows which files and functions a branch changed, how those functions call each other, and which added lines look risky.</p>
+      <p class="lede">Glance shows which files and functions a branch changed, how those functions call each other, and which lines match your own flag rules.</p>
       <div class="cmd">
         <pre><span class="p">$ </span>pnpm add -g github:nishilfaldu/glance</pre>
         <button class="copy" type="button" data-copy="pnpm add -g github:nishilfaldu/glance" aria-label="Copy install command"><svg><use href="#i-copy"/></svg></button>
@@ -248,7 +249,7 @@
         <div class="pv-body center">
           <div class="term"><span class="p">$ </span>git switch feature/session-rotation
 <span class="p">$ </span>glance
-<span class="o">feature/session-rotation → main: 11 files, 14 functions, 5 flagged</span>
+<span class="o">feature/session-rotation → main: 11 files, 14 functions, 4 flagged</span>
 <span class="o">Review page: </span><span class="u">http://127.0.0.1:53817/r/local</span></div>
         </div>
       </figure>
@@ -264,7 +265,7 @@
           <div class="stack">
             <div class="term"><span class="p">$ </span>export BLOB_READ_WRITE_TOKEN=vercel_blob_rw_…
 <span class="p">$ </span>glance publish --pr
-<span class="o">feature/session-rotation → main: 11 files, 14 functions, 5 flagged</span>
+<span class="o">feature/session-rotation → main: 11 files, 14 functions, 4 flagged</span>
 <span class="u">https://glance.nishilfaldu.site/r#k3x9d2/9xQ2mV7cLk0aTf3RzH1bWg</span></div>
             <div class="rows" style="--railw: 30px">
               <div class="r c-grey dim"><span class="ti"><span>Adds refresh tokens and rotates the session on checkout.</span></span></div>
@@ -288,7 +289,7 @@
             <a class="r c-grey" href="#diff"><span class="ti"><span>Read what changed</span></span><span class="me">git diff</span></a>
             <a class="r c-blue" href="#functions"><span class="ti"><span>Map each line to its function</span></span><span class="me">TypeScript</span></a>
             <a class="r c-blue" href="#calls"><span class="ti"><span>Follow calls through imports</span></span><span class="me">imports</span></a>
-            <a class="r c-amber" href="#flags"><span class="ti"><span>Flag risky lines</span></span><span class="me">flags</span></a>
+            <a class="r c-amber" href="#flags"><span class="ti"><span>Apply your flag rules</span></span><span class="me">.glance.yml</span></a>
             <a class="r c-green" href="#brief"><span class="ti"><span>Write the brief</span><span class="chip grey">brief.json</span></span><span class="me">no source code</span></a>
             <a class="r c-green" href="#drawing"><span class="ti"><span>Draw the page</span></span><span class="me">viewer.html</span></a>
           </div>
@@ -308,10 +309,10 @@
               <div class="r c-grey dim" data-n="m1" data-lane="0"><span class="ti"><span>Fix pagination on orders</span></span><span class="me">main</span></div>
               <div class="r c-grey dim" data-n="m2" data-lane="0"><span class="ti"><span>Bump eslint</span></span><span class="me">main</span></div>
               <div class="r c-blue" data-n="f1" data-lane="1"><span class="ti"><span>Rotate sessions across checkout</span></span><span class="me">your branch</span></div>
-              <div class="r c-green here" data-n="b" data-lane="0"><span class="ti"><span>Initial storefront</span><span class="chip grey">2d83f0b</span></span><span class="me">merge base</span></div>
+              <div class="r c-green here" data-n="b" data-lane="0"><span class="ti"><span>Initial storefront</span><span class="chip grey">88fc5ed</span></span><span class="me">merge base</span></div>
             </div>
             <div class="term"><span class="p">$ </span>git merge-base main feature/session-rotation
-<span class="o">2d83f0b</span></div>
+<span class="o">88fc5ed</span></div>
           </div>
         </div>
       </figure>
@@ -320,18 +321,18 @@
     <section class="step" id="diff" data-pv="diff">
       <h2>What changed</h2>
       <p><code>git diff --name-status -M</code> lists the files that were added, changed or renamed. Deleted files are left out, because they no longer exist on the branch.</p>
-      <p>Glance skips lockfiles, minified files, files marked <code>@generated</code> or <code>DO NOT EDIT</code> near the top, and files that match <code>skip:</code> in <code>.glance.yml</code>. Skipped files still appear on the map with a dashed border. For every other file, <code>git diff -U0</code> gives the exact line numbers that changed.</p>
+      <p>Glance skips the files you list under <code>skip:</code> in <code>.glance.yml</code>, such as generated code. Skipped files still appear on the map with a dashed border, but Glance doesn't read them. For every other file, <code>git diff -U0</code> gives the exact line numbers that changed.</p>
       <figure class="pv" id="pv-diff">
         <div class="pv-head"><span class="t">~/storefront</span></div>
         <div class="pv-body">
           <div class="stack">
-            <div class="term"><span class="p">$ </span>git diff --name-status -M 2d83f0b HEAD
+            <div class="term"><span class="p">$ </span>git diff --name-status -M 88fc5ed HEAD
 M  docs/sessions.md      <span class="o">skip: .glance.yml</span>
-M  generated/client.ts   <span class="o">skip: @generated</span>
+M  generated/client.ts   <span class="o">skip: .glance.yml</span>
 A  src/auth/refresh.ts
 M  src/auth/session.ts
 <span class="o">… 7 more</span></div>
-            <div class="term"><span class="p">$ </span>git diff -U0 2d83f0b HEAD -- src/auth/session.ts
+            <div class="term"><span class="p">$ </span>git diff -U0 88fc5ed HEAD -- src/auth/session.ts
 <span class="h">@@ -7,0 +9 @@</span>  <span class="o">nothing removed, 1 added at line 9</span>
 <span class="a">+  rotatedFrom?: string;</span>
 <span class="h">@@ -10 +12,6 @@</span>  <span class="o">line 10 replaced by 12–17</span>
@@ -348,7 +349,7 @@ M  src/auth/session.ts
       <p>Glance parses each changed file with the TypeScript compiler. It doesn't build your project or check types, so any TS or JS file works. These count as functions: function declarations, named arrow functions, class methods, route handlers like <code>"POST /session"</code>, and test cases like <code>it("…", () =&gt; …)</code>.</p>
       <p>Each changed line belongs to the smallest function that contains it. A removed line belongs to the function now at that spot. Lines outside any function belong to the file. A function is new if main's version of the file has no function with that name, and changed if it does. In <code>package.json</code>, each added or updated dependency gets its own entry.</p>
       <figure class="pv" id="pv-units">
-        <div class="pv-head"><span class="t">session.ts <span>src/auth</span></span><span class="num">2</span></div>
+        <div class="pv-head"><span class="t">session.ts <span>src/auth</span></span><span class="nums"><span class="num">1</span><span class="num">3</span></span></div>
         <div class="pv-body">
           <div class="code"><div class="lines">
 <div class="ln"><span class="no">1</span><span class="sg"> </span><span class="tx"><span class="k">import</span> { SignJWT } <span class="k">from</span> <span class="s">"jose"</span>;</span></div>
@@ -412,24 +413,31 @@ M  src/auth/session.ts
 
     <section class="step" id="flags" data-pv="rules">
       <h2>Flags</h2>
-      <p>Glance has four rules. They only check lines the branch added, and flag:</p>
+      <p>Glance only flags what you ask for. Add rules under <code>flags:</code> in <code>.glance.yml</code> at the root of your repo. Each rule has a name and at least one of these:</p>
       <ul class="list">
-        <li>a <code>process.env</code> value with a hard-coded fallback</li>
-        <li><code>as any</code>, <code>@ts-ignore</code> or <code>eslint-disable</code></li>
-        <li>a <code>catch</code> block that is empty or only returns <code>null</code>, <code>[]</code> or a similar value</li>
-        <li>in a test file, an <code>expect</code> or <code>assert</code> line that was removed and not added back</li>
+        <li><code>path</code>: a file pattern. On its own, it flags every changed file that matches.</li>
+        <li><code>added</code>: a regular expression, checked against each added line.</li>
+        <li><code>removed</code>: a regular expression, checked against each removed line that wasn't added back.</li>
       </ul>
-      <p>Each rule has one number on the page. Click a numbered item to see the rule's name in the bar at the bottom. A flag means the pattern is there, not that the code is wrong.</p>
+      <p>A match on a line flags the function around it. Each rule gets one number on the page; click a numbered item to see the rule's name in the bar at the bottom. With no rules, nothing is flagged.</p>
       <figure class="pv" id="pv-rules">
-        <div class="pv-head"><span class="t">Rules</span><span class="status amber">4 rules</span></div>
-        <div class="pv-body center">
-          <div class="rows" style="--railw: 30px">
-            <div class="r c-amber"><span class="ti"><span>Error swallowed</span><span class="num">1</span></span><span class="me">catch { return null }</span></div>
-            <div class="r c-amber"><span class="ti"><span>Env var with a fallback</span><span class="num">2</span></span><span class="me">?? "dev-secret"</span></div>
-            <div class="r c-amber"><span class="ti"><span>Type check bypassed</span><span class="num">3</span></span><span class="me">as any · @ts-ignore</span></div>
-            <div class="r c-amber"><span class="ti"><span>Assertion removed</span><span class="num">4</span></span><span class="me">− expect(…)</span></div>
-            <div class="r c-grey dim"><span class="ti"><span>Skipped</span><span class="chip dash">package-lock.json</span></span><span class="me">.glance.yml</span></div>
-          </div>
+        <div class="pv-head"><span class="t">.glance.yml <span>storefront</span></span><span class="status amber">5 rules</span></div>
+        <div class="pv-body">
+          <div class="term">skip:
+  - generated/**
+  - docs/**
+flags:
+  - name: auth code                 <span class="num">1</span>
+    path: src/auth/**
+  - name: new catch block           <span class="num">2</span>
+    added: \bcatch\b
+  - name: env var with a fallback   <span class="num">3</span>
+    added: process\.env\.\w+\s*(\?\?|\|\|)
+  - name: type check bypassed       <span class="num">4</span>
+    added: as any|@ts-ignore|eslint-disable
+  - name: assertion removed         <span class="num">5</span>
+    path: tests/**
+    removed: \b(expect|assert)\(</div>
         </div>
       </figure>
     </section>
@@ -442,7 +450,7 @@ M  src/auth/session.ts
         <div class="pv-body">
           <div class="term">{
   "name": "session.ts", "state": "changed",
-  "flags": ["env var with a hard-coded fallback"],
+  "flags": ["auth code", "env var with a fallback"],
   "fns": [
     { "name": "signToken()", "state": "new",
       "calls": ["package.json#jose"] },
@@ -500,9 +508,12 @@ M  src/auth/session.ts
   --port &lt;n&gt;       <span class="o">Port for the local page</span>
   --no-open        <span class="o">Don't open a browser</span>
 
-<span class="o">Skip files with .glance.yml:</span>
+<span class="o">.glance.yml, in the repo root:</span>
   skip:
     - generated/**
+  flags:
+    - name: auth code
+      path: src/auth/**
 
 <span class="o">Publishing needs BLOB_READ_WRITE_TOKEN (a public Blob store you own),</span>
 <span class="o">or "blobToken" in ~/.config/glance/config.json</span></div>
