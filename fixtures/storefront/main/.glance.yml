@@ -1,0 +1,15 @@
+skip:
+  - generated/**
+  - docs/**
+flags:
+  - name: auth code
+    path: src/auth/**
+  - name: new catch block
+    added: \bcatch\b
+  - name: env var with a fallback
+    added: process\.env\.\w+\s*(\?\?|\|\|)
+  - name: type check bypassed
+    added: as any|@ts-ignore|eslint-disable
+  - name: assertion removed
+    path: tests/**
+    removed: \b(expect|assert)\(

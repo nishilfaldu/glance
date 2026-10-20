@@ -26,6 +26,13 @@ Options
   --no-open        Start the local page without opening a browser
   -h, --help       Show this help
 
+.glance.yml in the repo root lists files to skip and your own flag rules:
+  skip:
+    - generated/**
+  flags:
+    - name: env var with a fallback
+      added: process\\.env\\.\\w+\\s*(\\?\\?|\\|\\|)    (also: path, removed)
+
 Publishing needs BLOB_READ_WRITE_TOKEN, the token of a public Vercel Blob store you own, or "blobToken"
 in ~/.config/glance/config.json. GLANCE_URL (or "url") picks the site that shows the page.`;
 

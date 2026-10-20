@@ -1,18 +1,12 @@
-// Builds a brief: the whole repo tree, the functions a branch touched, the calls between them, and rule-based flags.
+// Builds a brief: the whole repo tree, the functions a branch touched, the calls between them, and the flags
+// from the repo's own rules in .glance.yml.
 import { basename } from "node:path";
 import { CODE_FILE, packageName, readCode, resolveImport, unitAt } from "./code.js";
-import { globToRegExp, parseGlanceYml } from "./config.js";
+import { readGlanceYml } from "./config.js";
 import * as git from "./git.js";
-const LOCKFILE = /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?|Cargo\.lock|poetry\.lock|go\.sum|composer\.lock|Gemfile\.lock)$/;
-const BUNDLED = /\.(min\.js|min\.css|map)$/;
-const GENERATED_MARK = /DO NOT EDIT|@generated/;
 const TEST_FILE = /(^|\/)(__tests__|tests?|spec)\/|\.(test|spec)\.[cm]?[jt]sx?$/;
 const DEP_FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
 const MAX_UNCHANGED_SHOWN = 12;
-// Rules: each one names what it found. Nothing here is a judgment call.
-const ENV_FALLBACK = /process\.env\.[A-Za-z0-9_]+\s*(\?\?|\|\|)\s*["'`]/;
-const TYPE_ESCAPE = /\bas any\b|@ts-ignore|@ts-nocheck|eslint-disable/;
-const ASSERTION = /\b(expect|assert)\s*[.(]/;
 const FOLDER_COLORS = {
     src: "#4caf50", app: "#4caf50", lib: "#8d6e63", utils: "#8d6e63", helpers: "#8d6e63",
     test: "#26a69a", tests: "#26a69a", __tests__: "#26a69a", spec: "#26a69a",
@@ -46,12 +40,27 @@ function fileIcon(path) {
         return "yaml";
     return "file";
 }
-function shouldSkip(path, text, patterns) {
-    if (LOCKFILE.test(path) || BUNDLED.test(path))
-        return true;
-    if (patterns.some((re) => re.test(path)))
-        return true;
-    return text !== null && GENERATED_MARK.test(text.split("\n", 5).join("\n"));
+// Puts each matching rule's name on the function around the matching line, or on the file when there is none.
+function applyFlags(rules, path, diff, change, recordAt) {
+    const flag = (list, name) => { if (!list.includes(name))
+        list.push(name); };
+    const readded = new Set(diff.added.map((a) => a.text.trim()));
+    for (const rule of rules) {
+        if (rule.path && !rule.path.test(path))
+            continue;
+        if (!rule.added && !rule.removed) {
+            flag(change.flags, rule.name);
+            continue;
+        }
+        for (const a of diff.added) {
+            if (rule.added?.test(a.text))
+                flag(recordAt(a.line)?.flags ?? change.flags, rule.name);
+        }
+        for (const r of diff.removed) {
+            if (rule.removed?.test(r.text) && !readded.has(r.text.trim()))
+                flag(recordAt(r.anchor)?.flags ?? change.flags, rule.name);
+        }
+    }
 }
 function depChanges(baseText, headText) {
     const parse = (t) => { try {
@@ -82,22 +91,22 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
     const read = (path) => (working ? git.readWorking(root, path) : git.show(root, head, path));
     const headFiles = working ? git.workingFiles(root) : git.listFiles(root, head);
     const fileSet = new Set(headFiles);
-    const skipPatterns = parseGlanceYml(read(".glance.yml")).skip.map(globToRegExp);
+    const config = readGlanceYml(read(".glance.yml"));
     const changes = new Map();
     for (const c of working ? git.workingChanges(root, from) : git.changedFiles(root, from, head)) {
         if (c.status === "D")
             continue; // deleted files are not in the tree at head
         changes.set(c.path, { ...c, state: c.status === "A" ? "new" : "changed", records: [], flags: [] });
     }
-    // 1. Which functions each file touched, plus flags from the rules.
+    // 1. Which functions each file touched, plus the flag rules from .glance.yml.
     const records = new Map();
     const code = new Map();
     for (const [path, change] of changes) {
-        const text = read(path);
-        if (shouldSkip(path, text, skipPatterns)) {
+        if (config.skip.some((re) => re.test(path))) {
             change.state = "skip";
             continue;
         }
+        const text = read(path);
         // git has no diff for untracked files: every line is new.
         const diff = change.untracked
             ? { added: (text ?? "").split("\n").map((t, i) => ({ line: i + 1, text: t })), removed: [] }
@@ -112,49 +121,32 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
             change.records.push(rec);
             return rec;
         };
+        // The touched function a line belongs to; only code files have them.
+        let recordAt = (_line) => undefined;
         if (basename(path) === "package.json") {
             for (const dep of depChanges(baseText, text))
                 addRecord(dep.name, "dep", dep.state, null);
-            continue;
         }
-        if (!CODE_FILE.test(path) || text === null)
-            continue;
-        const parsed = readCode(path, text);
-        code.set(path, parsed);
-        const baseNames = new Set(baseText && CODE_FILE.test(change.oldPath) ? readCode(change.oldPath, baseText).units.map((u) => u.name) : []);
-        const touched = new Set();
-        for (const a of diff.added)
-            touched.add(unitAt(parsed.units, a.line));
-        for (const r of diff.removed)
-            touched.add(unitAt(parsed.units, r.anchor));
-        const recordOf = new Map();
-        for (const u of parsed.units) {
-            if (touched.has(u))
-                recordOf.set(u, addRecord(u.name, u.kind, baseNames.has(u.name) ? "changed" : "new", u));
-        }
-        const flagAt = (line, reason) => {
-            const unit = unitAt(parsed.units, line);
-            const list = (unit && recordOf.get(unit)?.flags) ?? change.flags;
-            if (!list.includes(reason))
-                list.push(reason);
-        };
-        const addedLines = new Set(diff.added.map((a) => a.line));
-        for (const line of parsed.swallowed)
-            if (addedLines.has(line))
-                flagAt(line, "error swallowed");
-        for (const a of diff.added) {
-            if (ENV_FALLBACK.test(a.text))
-                flagAt(a.line, "env var with a hard-coded fallback");
-            if (TYPE_ESCAPE.test(a.text))
-                flagAt(a.line, "type or lint check bypassed");
-        }
-        if (TEST_FILE.test(path)) {
-            const readded = new Set(diff.added.map((a) => a.text.trim()));
-            for (const r of diff.removed) {
-                if (ASSERTION.test(r.text) && !readded.has(r.text.trim()))
-                    flagAt(r.anchor, "assertion removed");
+        else if (CODE_FILE.test(path) && text !== null) {
+            const parsed = readCode(path, text);
+            code.set(path, parsed);
+            const baseNames = new Set(baseText && CODE_FILE.test(change.oldPath) ? readCode(change.oldPath, baseText).units.map((u) => u.name) : []);
+            const touched = new Set();
+            for (const a of diff.added)
+                touched.add(unitAt(parsed.units, a.line));
+            for (const r of diff.removed)
+                touched.add(unitAt(parsed.units, r.anchor));
+            const recordOf = new Map();
+            for (const u of parsed.units) {
+                if (touched.has(u))
+                    recordOf.set(u, addRecord(u.name, u.kind, baseNames.has(u.name) ? "changed" : "new", u));
             }
+            recordAt = (line) => {
+                const unit = unitAt(parsed.units, line);
+                return unit ? recordOf.get(unit) : undefined;
+            };
         }
+        applyFlags(config.flags, path, diff, change, recordAt);
     }
     // 2. Calls between touched functions, resolved through local names and imports.
     const depRecords = [...records.values()].filter((r) => r.kind === "dep");

@@ -1,4 +1,4 @@
-// Reads TS/JS source with the TypeScript compiler: the functions in a file, what they call, and risky constructs.
+// Reads TS/JS source with the TypeScript compiler: the functions in a file and what they call.
 import ts from "typescript";
 export const CODE_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
 const HTTP_ROUTE = /^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+\//;
@@ -76,20 +76,10 @@ function readImport(node, imports) {
     if (bindings && ts.isNamespaceImport(bindings))
         imports.set(bindings.name.text, { source, imported: "*" });
 }
-// A catch that is empty or only returns nothing, null, undefined, false, [] or {}.
-function swallows(node, sf) {
-    const body = node.block.statements;
-    if (body.length === 0)
-        return true;
-    const only = body[0];
-    if (body.length !== 1 || !only || !ts.isReturnStatement(only))
-        return false;
-    return !only.expression || /^(null|undefined|false|\[\]|\{\})$/.test(only.expression.getText(sf));
-}
 export function readCode(path, text) {
     const sf = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, scriptKind(path));
     const lineOf = (pos) => sf.getLineAndCharacterOfPosition(pos).line + 1;
-    const parsed = { units: [], imports: new Map(), swallowed: [] };
+    const parsed = { units: [], imports: new Map() };
     function visit(node, owner) {
         const head = unitFor(node);
         if (head) {
@@ -101,8 +91,6 @@ export function readCode(path, text) {
         const called = owner && calleeName(node);
         if (owner && called)
             owner.calls.add(called);
-        if (ts.isCatchClause(node) && swallows(node, sf))
-            parsed.swallowed.push(lineOf(node.getStart(sf)));
         ts.forEachChild(node, (child) => visit(child, owner));
     }
     visit(sf, null);

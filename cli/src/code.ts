@@ -1,4 +1,4 @@
-// Reads TS/JS source with the TypeScript compiler: the functions in a file, what they call, and risky constructs.
+// Reads TS/JS source with the TypeScript compiler: the functions in a file and what they call.
 import ts from "typescript";
 
 export const CODE_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
@@ -24,7 +24,6 @@ export interface Import {
 export interface ParsedCode {
   units: Unit[];
   imports: Map<string, Import>; // by local name
-  swallowed: number[]; // lines of catch blocks that drop the error
 }
 
 type UnitHead = Omit<Unit, "start" | "end" | "calls">;
@@ -94,19 +93,10 @@ function readImport(node: ts.ImportDeclaration, imports: Map<string, Import>): v
   if (bindings && ts.isNamespaceImport(bindings)) imports.set(bindings.name.text, { source, imported: "*" });
 }
 
-// A catch that is empty or only returns nothing, null, undefined, false, [] or {}.
-function swallows(node: ts.CatchClause, sf: ts.SourceFile): boolean {
-  const body = node.block.statements;
-  if (body.length === 0) return true;
-  const only = body[0];
-  if (body.length !== 1 || !only || !ts.isReturnStatement(only)) return false;
-  return !only.expression || /^(null|undefined|false|\[\]|\{\})$/.test(only.expression.getText(sf));
-}
-
 export function readCode(path: string, text: string): ParsedCode {
   const sf = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, scriptKind(path));
   const lineOf = (pos: number) => sf.getLineAndCharacterOfPosition(pos).line + 1;
-  const parsed: ParsedCode = { units: [], imports: new Map(), swallowed: [] };
+  const parsed: ParsedCode = { units: [], imports: new Map() };
 
   function visit(node: ts.Node, owner: Unit | null): void {
     const head = unitFor(node);
@@ -117,7 +107,6 @@ export function readCode(path: string, text: string): ParsedCode {
     if (ts.isImportDeclaration(node)) readImport(node, parsed.imports);
     const called = owner && calleeName(node);
     if (owner && called) owner.calls.add(called);
-    if (ts.isCatchClause(node) && swallows(node, sf)) parsed.swallowed.push(lineOf(node.getStart(sf)));
     ts.forEachChild(node, (child) => visit(child, owner));
   }
   visit(sf, null);

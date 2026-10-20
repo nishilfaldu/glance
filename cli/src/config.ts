@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { parse } from "yaml";
 import { gitDir } from "./git.js";
 
 const DEFAULT_URL = "https://glance.nishilfaldu.site";
@@ -49,22 +50,92 @@ export function saveId(root: string, branch: string, id: string): void {
   writeFileSync(path, JSON.stringify(ids, null, 2) + "\n");
 }
 
-// .glance.yml supports simple lists only:
+// A flag rule from .glance.yml. It matches a changed file whose path matches `path` (any file if left out).
+// With `added` or `removed`, it flags the function around each added or removed line that matches;
+// with neither, it flags the whole file.
+export interface FlagRule {
+  name: string;
+  path?: RegExp;
+  added?: RegExp;
+  removed?: RegExp; // a removed line that was added back unchanged (a move) doesn't count
+}
+
+export interface GlanceConfig {
+  skip: RegExp[]; // files left on the map but not read
+  flags: FlagRule[];
+}
+
+// .glance.yml, in the repo root:
 //   skip:
 //     - generated/**
-export function parseGlanceYml(text: string | null): { skip: string[] } {
-  const out: { skip: string[] } = { skip: [] };
-  if (!text) return out;
-  let key: string | null = null;
-  for (const raw of text.split("\n")) {
-    const line = raw.replace(/#.*$/, "").trimEnd();
-    if (!line.trim()) continue;
-    const head = line.match(/^([A-Za-z_]+):\s*$/);
-    if (head) { key = head[1] ?? null; continue; }
-    const item = line.match(/^\s*-\s*["']?([^"']+?)["']?\s*$/);
-    if (item?.[1] && key === "skip") out.skip.push(item[1]);
+//   flags:
+//     - name: env var with a fallback
+//       added: process\.env\.\w+\s*(\?\?|\|\|)
+//     - name: payments code
+//       path: src/payments/**
+export function readGlanceYml(text: string | null): GlanceConfig {
+  const config: GlanceConfig = { skip: [], flags: [] };
+  if (!text) return config;
+  let raw: unknown;
+  try {
+    raw = parse(text);
+  } catch (err) {
+    throw configError(err instanceof Error ? err.message : String(err));
   }
-  return out;
+  if (raw === null || raw === undefined) return config;
+  if (!isMap(raw)) throw configError("expected a map with skip: and flags:");
+  for (const key of Object.keys(raw)) {
+    if (key !== "skip" && key !== "flags") throw configError(`unknown key "${key}"; expected skip or flags`);
+  }
+
+  config.skip = listOf(raw.skip, "skip").map((glob, i) => {
+    if (typeof glob !== "string") throw configError(`skip[${i}] must be a path pattern`);
+    return globToRegExp(glob);
+  });
+
+  config.flags = listOf(raw.flags, "flags").map((rule, i) => {
+    if (!isMap(rule)) throw configError(`flags[${i}] must have a name and a path, added or removed`);
+    const { name, path, added, removed, ...rest } = rule;
+    const where = typeof name === "string" ? `flag "${name}"` : `flags[${i}]`;
+    if (typeof name !== "string" || !name.trim()) throw configError(`${where} needs a name`);
+    const extra = Object.keys(rest)[0];
+    if (extra) throw configError(`${where} has unknown key "${extra}"; expected name, path, added or removed`);
+    if (path === undefined && added === undefined && removed === undefined) {
+      throw configError(`${where} needs a path, added or removed`);
+    }
+    const out: FlagRule = { name: name.trim() };
+    if (path !== undefined) {
+      if (typeof path !== "string") throw configError(`${where}: path must be a path pattern`);
+      out.path = globToRegExp(path);
+    }
+    if (added !== undefined) out.added = regex(added, `${where}: added`);
+    if (removed !== undefined) out.removed = regex(removed, `${where}: removed`);
+    return out;
+  });
+  return config;
+}
+
+function configError(message: string): Error {
+  return new Error(`.glance.yml: ${message}`);
+}
+
+function isMap(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function listOf(value: unknown, key: string): unknown[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw configError(`${key} must be a list`);
+  return value;
+}
+
+function regex(value: unknown, where: string): RegExp {
+  if (typeof value !== "string") throw configError(`${where} must be a regular expression`);
+  try {
+    return new RegExp(value);
+  } catch (err) {
+    throw configError(`${where} is not a valid regular expression (${err instanceof Error ? err.message : err})`);
+  }
 }
 
 // "**/" matches any number of folders, "*" anything but "/", "?" one character.

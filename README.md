@@ -14,6 +14,9 @@ glance publish --pr   # upload it and link it in this branch's pull request
 glance --help
 ```
 
+A `.glance.yml` in the repo root lists files to skip and your own flag rules;
+nothing is skipped or flagged otherwise. The format is on the site.
+
 Glance is local only until you publish. `glance publish` uploads the brief to a
 **public** Vercel Blob store you own; set its `BLOB_READ_WRITE_TOKEN`, or put it
 in `~/.config/glance/config.json`:

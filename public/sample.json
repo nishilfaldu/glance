@@ -100,6 +100,9 @@
                 "name": "refresh.ts",
                 "icon": "ts",
                 "state": "new",
+                "flags": [
+                  "auth code"
+                ],
                 "fns": [
                   {
                     "name": "refreshIfExpiring()",
@@ -109,7 +112,7 @@
                       "src/auth/session.ts#rotateSession()"
                     ],
                     "flags": [
-                      "error swallowed"
+                      "new catch block"
                     ]
                   }
                 ]
@@ -119,7 +122,8 @@
                 "icon": "ts",
                 "state": "changed",
                 "flags": [
-                  "env var with a hard-coded fallback"
+                  "auth code",
+                  "env var with a fallback"
                 ],
                 "fns": [
                   {
@@ -156,7 +160,7 @@
             "color": "#29b6f6",
             "files": [
               {
-                "name": "stripe.ts",
+                "name": "charge.ts",
                 "icon": "ts",
                 "state": "same"
               }
@@ -226,7 +230,7 @@
                   "src/api/checkout.ts#handleCheckout()"
                 ],
                 "flags": [
-                  "type or lint check bypassed",
+                  "type check bypassed",
                   "assertion removed"
                 ]
               }

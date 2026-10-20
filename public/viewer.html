@@ -547,7 +547,7 @@
       if (x.state === "new") seen.new = true;
       if (f.state === "skip") seen.skip = true;
     }, true);
-    var keys = rules.length ? [['<span class="badge">1</span>', "risky pattern"]] : [];
+    var keys = rules.length ? [['<span class="badge">1</span>', "flagged"]] : [];
     if (seen.new) keys.push(['<span class="new"></span>', "new"]);
     if (seen.skip) keys.push(['<span class="skipped"></span>', "skipped"]);
     var legend = document.getElementById("legend");

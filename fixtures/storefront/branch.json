@@ -1,0 +1,5 @@
+{
+  "base": "Initial storefront",
+  "branch": "feature/session-rotation",
+  "title": "Rotate sessions across checkout"
+}

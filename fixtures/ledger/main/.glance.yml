@@ -1,2 +1,15 @@
 skip:
+  - pnpm-lock.yaml
   - "**/__snapshots__/**"
+  - packages/api-client/**
+flags:
+  - name: billing code
+    path: apps/api/src/services/billing/**
+  - name: env var with a fallback
+    added: process\.env\.\w+\s*(\?\?|\|\|)
+  - name: new catch block
+    added: \bcatch\b
+  - name: type check bypassed
+    added: as any|@ts-ignore|eslint-disable
+  - name: assertion removed
+    removed: \b(expect|assert)\(
