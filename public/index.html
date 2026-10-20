@@ -3,27 +3,626 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="robots" content="noindex, nofollow">
-<link rel="icon" href="data:,">
 <title>Glance</title>
+<meta name="description" content="Glance maps a pull request: where the changes sit, and how the changed functions call each other.">
+<meta property="og:title" content="Glance">
+<meta property="og:description" content="See a pull request before you read it.">
+<meta property="og:url" content="https://glance.nishilfaldu.site">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='10' fill='%231f1f1f'/%3E%3Cpath d='M11 10v12M11 16c0-4 4-6 10-6' fill='none' stroke='%23fff' stroke-width='2'/%3E%3Ccircle cx='11' cy='10' r='2.6' fill='%23fff'/%3E%3Ccircle cx='21' cy='10' r='2.6' fill='%235b8def'/%3E%3Ccircle cx='11' cy='22' r='2.6' fill='%23fff'/%3E%3C/svg%3E">
 <script>try { var t = localStorage.getItem("glance-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap">
 <style>
-  :root { --bg: #ffffff; --fg: #171717; --muted: #666666; --line: #ebebeb; color-scheme: light; }
-  /* Same theme rules as the viewer: system unless a theme was picked there */
-  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #000000; --fg: #ededed; --muted: #a1a1a1; --line: #262626; color-scheme: dark } }
-  :root[data-theme="dark"] { --bg: #000000; --fg: #ededed; --muted: #a1a1a1; --line: #262626; color-scheme: dark }
-  body { margin: 0; min-height: 100vh; display: grid; place-content: center; gap: 8px; text-align: center;
-    background: var(--bg); color: var(--fg); font: 15px/1.5 "Geist", system-ui, sans-serif;
-    padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); }
-  h1 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.02em; }
-  p { margin: 0; color: var(--muted); }
-  a { color: var(--fg); text-underline-offset: 3px; text-decoration-color: var(--muted); }
+  /* Soft palette: near-black text, hairline borders, color only where it means something.
+     blue = the main change, amber = flags, teal = not connected, green = status. The two dark blocks must stay identical. */
+  :root {
+    --bg: #ffffff; --surface: #ffffff; --fg: #1f1f1f; --muted: #6b6b6b; --faint: #a6a6a6;
+    --line: #ececec; --soft: #f4f4f3; --well: #fafafa; --band: #f6f6f5;
+    --blue: #2f6fe4; --blue-bg: #edf3ff; --amber: #c47a0e; --amber-dot: #efb02f; --amber-bg: #fff5e3;
+    --teal: #138f80; --teal-dot: #4cc5b4; --teal-bg: #e8f7f4; --green: #2e9b55; --red: #cf4a3f;
+    --add-bg: #eef8f1; --del-bg: #fdf0ee; --unit: #8b5cc4;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #161616; --surface: #1b1b1b; --fg: #ececec; --muted: #a3a3a3; --faint: #6c6c6c;
+    --line: #2a2a2a; --soft: #252525; --well: #1f1f1f; --band: #222222;
+    --blue: #7ea8ff; --blue-bg: #1a2742; --amber: #f2b441; --amber-dot: #efb02f; --amber-bg: #2f2512;
+    --teal: #5fd6c5; --teal-dot: #4cc5b4; --teal-bg: #11302c; --green: #5fd28f; --red: #ff7b70;
+    --add-bg: #13261a; --del-bg: #2c1614; --unit: #c3a0ef; color-scheme: dark } }
+  :root[data-theme="dark"] {
+    --bg: #161616; --surface: #1b1b1b; --fg: #ececec; --muted: #a3a3a3; --faint: #6c6c6c;
+    --line: #2a2a2a; --soft: #252525; --well: #1f1f1f; --band: #222222;
+    --blue: #7ea8ff; --blue-bg: #1a2742; --amber: #f2b441; --amber-dot: #efb02f; --amber-bg: #2f2512;
+    --teal: #5fd6c5; --teal-dot: #4cc5b4; --teal-bg: #11302c; --green: #5fd28f; --red: #ff7b70;
+    --add-bg: #13261a; --del-bg: #2c1614; --unit: #c3a0ef; color-scheme: dark }
+
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 40px; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.65 var(--sans); -webkit-font-smoothing: antialiased; }
+  a { color: inherit; text-decoration-color: var(--faint); text-underline-offset: 3px; }
+  :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 8px; }
+  code { font: 0.86em var(--mono); background: var(--soft); border-radius: 6px; padding: 2px 6px; white-space: nowrap; }
+  ::selection { background: var(--blue-bg); }
+
+  /* Layout: short prose on the left, the card for the section you're reading pinned on the right */
+  .layout { max-width: 1280px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr);
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .pane-col { display: none; }
+  main { min-width: 0; max-width: 560px; width: 100%; margin: 0 auto; padding: 28px 0 96px; }
+  @media (min-width: 1040px) {
+    .layout { grid-template-columns: minmax(0, 480px) minmax(0, 1fr); column-gap: 72px; padding-inline: 48px; }
+    main { margin: 0; }
+    .pane-col { display: block; }
+  }
+  .pane { position: sticky; top: 28px; height: calc(100vh - 56px); min-height: 520px; }
+
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 96px; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 500; text-decoration: none; }
+  .brand svg { width: 26px; height: 26px; }
+  @media (max-width: 1039px) { .top { margin-bottom: 56px; } }
+
+  h1 { font-size: clamp(34px, 5vw, 44px); line-height: 1.12; letter-spacing: -0.025em; font-weight: 500; margin: 0 0 16px; text-wrap: balance; }
+  .lede { font-size: 18px; line-height: 1.55; color: var(--muted); margin: 0 0 32px; text-wrap: pretty; }
+  h2 { font-size: 20px; line-height: 1.3; letter-spacing: -0.01em; font-weight: 500; margin: 0 0 8px; }
+  main p { margin: 0 0 12px; color: var(--muted); text-wrap: pretty; }
+  main p strong { color: var(--fg); font-weight: 500; }
+  .step { scroll-margin-top: 40px; }
+  .step + .step { margin-top: 72px; }
+  .step.first { margin-top: 0; }
+
+  /* Pills */
+  .pill { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px; border-radius: 999px; border: 0;
+    background: var(--soft); color: var(--fg); font: 15px var(--sans); text-decoration: none; cursor: pointer; white-space: nowrap; }
+  .pill:hover { background: color-mix(in srgb, var(--soft) 70%, var(--line)); }
+  .pill.sm { height: 32px; padding: 0 13px; font-size: 14px; }
+  .pill.line { background: none; border: 1px solid var(--line); }
+  .top .end { display: flex; align-items: center; gap: 10px; }
+  .themes { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--soft); }
+  .themes button { display: grid; place-items: center; width: 28px; height: 26px; padding: 0; border: 0; border-radius: 999px;
+    background: none; color: var(--faint); cursor: pointer; }
+  .themes button:hover { color: var(--fg); }
+  .themes button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
+  .themes svg { width: 14px; height: 14px; }
+  .status { display: inline-flex; align-items: center; gap: 7px; font-size: 14.5px; color: var(--green); white-space: nowrap; }
+  .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .status.amber { color: var(--amber); } .status.amber::before { display: none; }
+  .status.teal { color: var(--teal); } .status.teal::before { display: none; }
+
+  /* Command bar: the install line, with a round copy button */
+  .cmd { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 20px; padding: 8px 8px 8px 18px; background: var(--surface); margin: 0 0 12px; }
+  .cmd pre { flex: 1; min-width: 0; margin: 0; font: 13.5px/1.7 var(--mono); overflow-x: auto; color: var(--fg); }
+  .cmd .p { color: var(--faint); user-select: none; }
+  .copy { flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer;
+    background: var(--fg); color: var(--bg); align-self: flex-end; }
+  .copy:hover { opacity: .85; }
+  .copy svg { width: 15px; height: 15px; }
+  .copy[data-done] { background: var(--green); }
+  .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+  /* Cards */
+  .pv { border: 1px solid var(--line); border-radius: 22px; background: var(--surface); overflow: hidden;
+    display: flex; flex-direction: column; margin: 24px 0 0; }
+  /* Cards hug their content like the rest of the page; the live demos fill the pane */
+  .pane .pv { position: absolute; inset: 0 0 auto 0; max-height: 100%; margin: 0; opacity: 0; transform: translateY(10px); pointer-events: none; visibility: hidden;
+    transition: opacity .35s ease, transform .35s ease, visibility 0s linear .35s; }
+  .pane .pv.on { opacity: 1; transform: none; pointer-events: auto; visibility: visible; transition: opacity .35s ease, transform .35s ease, visibility 0s; }
+  @media (prefers-reduced-motion: reduce) { .pane .pv, .pane .pv.on { transition: none; transform: none; } }
+  .pv-head { display: flex; align-items: center; gap: 10px; padding: 20px 26px 6px; flex: none; }
+  .pv-head .t { font-size: 17px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .pv-head .t span { color: var(--faint); font-weight: 400; }
+  .pv-head > :last-child:not(.t) { margin-left: auto; }
+  .pv-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 26px 24px; }
+  .pv-body.frame { padding: 0; overflow: hidden; }
+  .pv-body.center { display: grid; align-content: center; }
+  .pv iframe { display: block; width: 100%; height: 620px; border: 0; background: transparent; }
+  .pane .pv.tall { bottom: 0; }
+  .pane .pv iframe { height: 100%; }
+  .pv-foot { display: flex; align-items: center; gap: 10px; padding: 14px 26px 20px; flex: none; border-top: 1px solid var(--line); font-size: 15px; }
+  .stack { display: grid; gap: 18px; }
+
+  /* Rail rows: a dot per row on a lane, links drawn between dots */
+  .rows { position: relative; margin: 0 -12px; }
+  .rows > svg.rail { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 1; }
+  .rail path { fill: none; stroke-width: 1.5; stroke-linecap: round; }
+  .r { position: relative; display: grid; grid-template-columns: var(--railw, 34px) minmax(0, 1fr) auto; align-items: center; gap: 10px;
+    min-height: 46px; padding: 6px 12px; border-radius: 12px; }
+  .r:hover, .r.here { background: var(--band); }
+  .r .dot { position: absolute; top: 50%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; z-index: 2; background: var(--c, var(--faint)); }
+  .r .ti { grid-column: 2; display: flex; align-items: center; gap: 9px; min-width: 0; font-size: 15.5px; }
+  .r .ti > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .r .me { grid-column: 3; font: 12.5px var(--mono); color: var(--faint); white-space: nowrap; text-align: right; }
+  .r.dim .ti { color: var(--muted); }
+  .r.amber .ti > span:first-child { color: var(--amber); }
+  .c-blue { --c: var(--blue); } .c-amber { --c: var(--amber-dot); } .c-teal { --c: var(--teal-dot); } .c-grey { --c: var(--faint); } .c-green { --c: var(--green); }
+  @media (max-width: 520px) { .r .me { display: none; } .r { grid-template-columns: var(--railw, 34px) minmax(0, 1fr); } }
+
+  /* Chips and badges */
+  .chip { font: 13px var(--mono); padding: 1px 8px; border-radius: 7px; white-space: nowrap; line-height: 1.6; }
+  .chip.blue { color: var(--blue); background: var(--blue-bg); }
+  .chip.teal { color: var(--teal); background: var(--teal-bg); }
+  .chip.grey { color: var(--muted); background: var(--soft); }
+  .chip.dash { color: var(--faint); border: 1px dashed var(--line); background: none; }
+  .num { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; font: 500 12px var(--sans);
+    color: var(--amber); background: var(--amber-bg); border: 1px solid color-mix(in srgb, var(--amber-dot) 45%, transparent); flex: none; }
+  .num.teal { color: var(--teal); background: var(--teal-bg); border-color: color-mix(in srgb, var(--teal-dot) 45%, transparent); }
+  .new { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex: none; }
+
+  /* Code */
+  .code { font: 12.5px/1.8 var(--mono); border-radius: 14px; overflow-x: auto; background: var(--well); border: 1px solid var(--line); }
+  .code .lines { padding: 8px 0; min-width: max-content; }
+  .ln { display: grid; grid-template-columns: 38px 16px auto; padding-right: 18px; white-space: pre; }
+  .ln .no { color: var(--faint); text-align: right; padding-right: 12px; user-select: none; }
+  .ln .sg { color: var(--faint); user-select: none; }
+  .ln.add { background: var(--add-bg); } .ln.add .sg { color: var(--green); }
+  .ln.del { background: var(--del-bg); } .ln.del .sg { color: var(--red); }
+  .ln.del .tx { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--red) 45%, transparent); }
+  .unit { box-shadow: inset 2px 0 var(--unit); }
+  .utag { display: block; padding: 4px 0 0 54px; font-size: 11.5px; color: var(--unit); line-height: 1.6; }
+  .k { color: #b0367c; } .s { color: #23803f; } .f { color: #6a3fc1; }
+  .m { background: var(--amber-bg); border-radius: 4px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--amber-dot) 45%, transparent); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .k { color: #ff86bf } :root:not([data-theme="light"]) .s { color: #7ddc96 } :root:not([data-theme="light"]) .f { color: #c8a8ff } }
+  :root[data-theme="dark"] .k { color: #ff86bf } :root[data-theme="dark"] .s { color: #7ddc96 } :root[data-theme="dark"] .f { color: #c8a8ff }
+  .term { font: 13px/1.85 var(--mono); background: var(--well); border: 1px solid var(--line); border-radius: 14px; padding: 14px 18px; overflow-x: auto; white-space: pre; color: var(--fg); }
+  .term .p, .term .o { color: var(--faint); }
+  .term .u { color: var(--blue); }
+
+  /* Arrows between chips, for the unchanged-helper chain */
+  .net { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 40px; }
+  .net > svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  .edges path { fill: none; stroke: var(--faint); stroke-width: 1.5; }
+  .edges path.soft { stroke-dasharray: 3 4; }
+  .edges marker path { fill: var(--faint); stroke: none; }
+  .fn { font: 13px var(--mono); padding: 4px 10px; border-radius: 9px; background: var(--soft); color: var(--fg); white-space: nowrap; position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 7px; }
+  .fn.ghost { background: none; border: 1px dashed var(--line); color: var(--faint); }
+
+  /* Reference */
+  table { width: 100%; border-collapse: collapse; margin: 4px 0 0; font-size: 15px; }
+  td { padding: 9px 12px 9px 0; border-top: 1px solid var(--line); vertical-align: top; color: var(--muted); }
+  td:first-child { white-space: nowrap; color: var(--fg); padding-right: 18px; }
+  tr:first-child td { border-top: 0; }
+  footer { margin-top: 96px; font-size: 14px; color: var(--faint); display: flex; flex-wrap: wrap; gap: 6px 18px; }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--fg); }
 </style>
 </head>
 <body>
-  <h1>Glance</h1>
-  <p>Open a review link from a pull request.</p>
-  <p><a href="/r/sample">See an example</a></p>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5" y="5" width="9" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.8A1.8 1.8 0 0 0 9.2 2H3.8A1.8 1.8 0 0 0 2 3.8v5.4A1.8 1.8 0 0 0 3.8 11H5" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="i-system" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 14h5M8 11.5V14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-light" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-dark" viewBox="0 0 16 16"><path d="M13.5 9.8A6 6 0 0 1 6.2 2.5a6 6 0 1 0 7.3 7.3z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-mark" viewBox="0 0 26 26"><rect width="26" height="26" rx="8" fill="currentColor"/><path d="M9 8v10M9 13c0-3.2 3.2-5 8-5" fill="none" stroke="var(--bg)" stroke-width="1.7"/><circle cx="9" cy="8" r="2.1" fill="var(--bg)"/><circle cx="17" cy="8" r="2.1" fill="#5b8def"/><circle cx="9" cy="18" r="2.1" fill="var(--bg)"/></symbol>
+</svg>
+
+<div class="layout">
+  <main>
+    <div class="top">
+      <a class="brand" href="/"><svg><use href="#i-mark"/></svg>Glance</a>
+      <div class="end">
+        <div class="themes" id="themes" role="group" aria-label="Theme">
+          <button type="button" data-theme="system" aria-label="System theme" title="System"><svg><use href="#i-system"/></svg></button>
+          <button type="button" data-theme="light" aria-label="Light theme" title="Light"><svg><use href="#i-light"/></svg></button>
+          <button type="button" data-theme="dark" aria-label="Dark theme" title="Dark"><svg><use href="#i-dark"/></svg></button>
+        </div>
+        <a class="pill sm" href="/demo">Example</a>
+      </div>
+    </div>
+
+    <section class="step first" id="top" data-pv="map">
+      <h1>See a pull request before you read it.</h1>
+      <p class="lede">Glance maps a branch: where the changes sit, and how the changed functions call each other. The edit that doesn't belong stands out on its own.</p>
+      <div class="cmd">
+        <pre><span class="p">$ </span>git clone https://github.com/nishilfaldu/glance
+<span class="p">$ </span>cd glance/cli &amp;&amp; npm install &amp;&amp; npm link</pre>
+        <button class="copy" type="button" data-copy="git clone https://github.com/nishilfaldu/glance&#10;cd glance/cli &amp;&amp; npm install &amp;&amp; npm link" aria-label="Copy install commands"><svg><use href="#i-copy"/></svg></button>
+      </div>
+      <div class="cta">
+        <a class="pill" href="/demo">Open the example</a>
+        <a class="pill line" href="#how">How it works</a>
+      </div>
+    </section>
+
+    <section class="step" id="repo-map" data-pv="map">
+      <h2>Repo map</h2>
+      <p>The whole repo on one screen. Changed files open up to show the functions the branch touched. Click one to mark it reviewed.</p>
+      <figure class="pv tall" id="pv-map">
+        <div class="pv-head"><span class="t">Rotate sessions across checkout <span>#42</span></span><span class="status">Live</span></div>
+        <div class="pv-body frame"><iframe data-src="/demo?embed&amp;tab=map" title="Repo map of the example pull request" loading="lazy"></iframe></div>
+      </figure>
+    </section>
+
+    <section class="step" id="call-graph" data-pv="calls">
+      <h2>Call graph</h2>
+      <p>Only the paths that lead to a change. Lines are folders, arrows are calls. Hover a function to trace it.</p>
+      <figure class="pv tall" id="pv-calls">
+        <div class="pv-head"><span class="t">Rotate sessions across checkout <span>#42</span></span><span class="status">Live</span></div>
+        <div class="pv-body frame"><iframe data-src="/demo?embed&amp;tab=calls" title="Call graph of the example pull request" loading="lazy"></iframe></div>
+      </figure>
+    </section>
+
+    <section class="step" id="run" data-pv="term">
+      <h2>Run it</h2>
+      <p>Check out a branch and run <code>glance</code>. The page opens on localhost and nothing leaves your machine. Add <code>--working</code> to include uncommitted changes.</p>
+      <figure class="pv" id="pv-term">
+        <div class="pv-head"><span class="t">~/storefront</span></div>
+        <div class="pv-body center">
+          <div class="term"><span class="p">$ </span>git switch feature/session-rotation
+<span class="p">$ </span>glance
+<span class="o">feature/session-rotation → main: 11 files, 14 functions, 5 flagged</span>
+<span class="o">Review page: </span><span class="u">http://127.0.0.1:53817/r/local</span></div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="how" data-pv="pipe">
+      <h2>How it works</h2>
+      <p>No AI. Glance reads git and parses your code with the TypeScript compiler, so the same branch always gives the same map.</p>
+      <figure class="pv" id="pv-pipe">
+        <div class="pv-head"><span class="t">From branch to map</span></div>
+        <div class="pv-body center">
+          <div class="rows" style="--railw: 30px">
+            <div class="r c-grey"><span class="ti"><span>Find where the branch left main</span></span><span class="me">git merge-base</span></div>
+            <div class="r c-grey"><span class="ti"><span>Read the changed lines</span></span><span class="me">git diff</span></div>
+            <div class="r c-grey"><span class="ti"><span>Drop lockfiles and generated code</span></span><span class="me">skip rules</span></div>
+            <div class="r c-blue"><span class="ti"><span>Map each line to its function</span></span><span class="me">TypeScript</span></div>
+            <div class="r c-blue"><span class="ti"><span>Follow calls through imports</span></span><span class="me">imports</span></div>
+            <div class="r c-blue"><span class="ti"><span>Find the main change</span></span><span class="me">largest group</span></div>
+            <div class="r c-amber"><span class="ti"><span>Number what the rules find</span></span><span class="me">flags</span></div>
+            <div class="r c-green here"><span class="ti"><span>Write the brief</span><span class="chip grey">brief.json</span></span><span class="me">no source code</span></div>
+          </div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="functions" data-pv="units">
+      <h2>Lines become functions</h2>
+      <p>Every changed line belongs to the innermost function around it. Lines outside any function belong to the file.</p>
+      <figure class="pv" id="pv-units">
+        <div class="pv-head"><span class="t">session.ts <span>src/auth</span></span><span class="num">2</span></div>
+        <div class="pv-body">
+          <div class="code"><div class="lines">
+<div class="ln"><span class="no">1</span><span class="sg"> </span><span class="tx"><span class="k">import</span> { SignJWT } <span class="k">from</span> <span class="s">"jose"</span>;</span></div>
+<div class="ln"><span class="no">2</span><span class="sg"> </span><span class="tx"><span class="k">import</span> { db } <span class="k">from</span> <span class="s">"../db"</span>;</span></div>
+<div class="ln"><span class="no">3</span><span class="sg"> </span><span class="tx"></span></div>
+<div class="ln add"><span class="no">4</span><span class="sg">+</span><span class="tx"><span class="k">const</span> SECRET = <span class="m">process.env.SESSION_SECRET ?? <span class="s">"dev-secret"</span></span>;</span></div>
+<div class="ln add"><span class="no">5</span><span class="sg">+</span><span class="tx"><span class="k">const</span> key = <span class="k">new</span> TextEncoder().encode(SECRET);</span></div>
+<div class="ln"><span class="no">6</span><span class="sg"> </span><span class="tx"></span></div>
+<div class="unit"><span class="utag">signToken() · new</span>
+<div class="ln add"><span class="no">7</span><span class="sg">+</span><span class="tx"><span class="k">async function</span> <span class="f">signToken</span>(userId: string) {</span></div>
+<div class="ln add"><span class="no">8</span><span class="sg">+</span><span class="tx">  <span class="k">return new</span> <span class="f">SignJWT</span>({ sub: userId })</span></div>
+<div class="ln add"><span class="no">9</span><span class="sg">+</span><span class="tx">    .setExpirationTime(<span class="s">"15m"</span>).sign(key);</span></div>
+<div class="ln add"><span class="no">10</span><span class="sg">+</span><span class="tx">}</span></div>
+</div>
+<div class="ln"><span class="no">11</span><span class="sg"> </span><span class="tx"></span></div>
+<div class="unit"><span class="utag">createSession() · changed</span>
+<div class="ln"><span class="no">12</span><span class="sg"> </span><span class="tx"><span class="k">export async function</span> <span class="f">createSession</span>(userId: string) {</span></div>
+<div class="ln del"><span class="no"></span><span class="sg">−</span><span class="tx">  <span class="k">const</span> token = crypto.randomUUID();</span></div>
+<div class="ln add"><span class="no">13</span><span class="sg">+</span><span class="tx">  <span class="k">const</span> token = <span class="k">await</span> <span class="f">signToken</span>(userId);</span></div>
+<div class="ln"><span class="no">14</span><span class="sg"> </span><span class="tx">  <span class="k">await</span> db.sessions.insert({ userId, token });</span></div>
+<div class="ln"><span class="no">15</span><span class="sg"> </span><span class="tx">  <span class="k">return</span> token;</span></div>
+<div class="ln"><span class="no">16</span><span class="sg"> </span><span class="tx">}</span></div>
+</div>
+<div class="ln"><span class="no">17</span><span class="sg"> </span><span class="tx"></span></div>
+<div class="unit"><span class="utag">rotateSession() · new</span>
+<div class="ln add"><span class="no">18</span><span class="sg">+</span><span class="tx"><span class="k">export async function</span> <span class="f">rotateSession</span>(oldToken: string) {</span></div>
+<div class="ln add"><span class="no">19</span><span class="sg">+</span><span class="tx">  <span class="k">const</span> old = <span class="k">await</span> db.sessions.take(oldToken);</span></div>
+<div class="ln add"><span class="no">20</span><span class="sg">+</span><span class="tx">  <span class="k">if</span> (!old) <span class="k">return</span> null;</span></div>
+<div class="ln add"><span class="no">21</span><span class="sg">+</span><span class="tx">  <span class="k">return</span> <span class="f">createSession</span>(old.userId);</span></div>
+<div class="ln add"><span class="no">22</span><span class="sg">+</span><span class="tx">}</span></div>
+</div>
+          </div></div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="calls" data-pv="resolve">
+      <h2>Calls connect them</h2>
+      <p>Each call is followed through the file's imports to the function it lands on. A chain through an unchanged helper still connects.</p>
+      <figure class="pv" id="pv-resolve">
+        <div class="pv-head"><span class="t">checkout.ts <span>src/api</span></span></div>
+        <div class="pv-body">
+          <div class="stack">
+            <div class="code"><div class="lines">
+<div class="ln"><span class="no">1</span><span class="sg"> </span><span class="tx"><span class="k">import</span> { <span class="m">rotateSession</span> } <span class="k">from</span> <span class="s">"../auth/session"</span>;</span></div>
+<div class="ln"><span class="no">2</span><span class="sg"> </span><span class="tx"></span></div>
+<div class="ln"><span class="no">3</span><span class="sg"> </span><span class="tx"><span class="k">export async function</span> <span class="f">handleCheckout</span>(req: Request) {</span></div>
+<div class="ln add"><span class="no">4</span><span class="sg">+</span><span class="tx">  <span class="k">const</span> token = <span class="k">await</span> <span class="m">rotateSession</span>(req.token);</span></div>
+            </div></div>
+            <div class="rows" style="--railw: 30px">
+              <div class="r c-grey"><span class="ti"><span>Imported from <code>../auth/session</code></span></span></div>
+              <div class="r c-grey dim"><span class="ti"><span>src/auth/session</span></span><span class="me">not a file</span></div>
+              <div class="r c-blue"><span class="ti"><span>src/auth/session.ts</span></span><span class="me">found</span></div>
+              <div class="r c-blue here"><span class="ti"><span>rotateSession()</span><span class="new"></span></span><span class="me">touched</span></div>
+            </div>
+            <div class="net" data-edges="x>h h>y">
+              <span class="fn" data-n="x">A()</span>
+              <span class="fn ghost" data-n="h">helper()</span>
+              <span class="fn" data-n="y">B()</span>
+            </div>
+          </div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="main-change" data-pv="groups">
+      <h2>The main change</h2>
+      <p>The largest group of connected functions is the main change. Anything outside it gets a teal number. Tests don't count, since they call everything.</p>
+      <figure class="pv" id="pv-groups">
+        <div class="pv-head"><span class="t">Rotate sessions across checkout <span>#42</span></span><span class="status teal">2 not connected</span></div>
+        <div class="pv-body">
+          <div class="rows" data-links="route>refresh refresh>rotate checkout>rotate rotate>create create>sign" style="--railw: 54px">
+            <div class="r c-blue" data-n="route" data-lane="0"><span class="ti"><span>POST /session/refresh</span><span class="new"></span></span><span class="me">routes.ts</span></div>
+            <div class="r c-amber amber" data-n="refresh" data-lane="0"><span class="ti"><span>refreshIfExpiring()</span><span class="new"></span><span class="num">1</span></span><span class="me">refresh.ts</span></div>
+            <div class="r c-blue" data-n="checkout" data-lane="1"><span class="ti"><span>handleCheckout()</span></span><span class="me">checkout.ts</span></div>
+            <div class="r c-blue here" data-n="rotate" data-lane="0"><span class="ti"><span>rotateSession()</span><span class="new"></span><span class="chip blue">main change</span></span><span class="me">session.ts</span></div>
+            <div class="r c-blue" data-n="create" data-lane="0"><span class="ti"><span>createSession()</span></span><span class="me">session.ts</span></div>
+            <div class="r c-blue" data-n="sign" data-lane="0"><span class="ti"><span>signToken()</span><span class="new"></span></span><span class="me">session.ts</span></div>
+            <div class="r c-teal" data-lane="2"><span class="ti"><span>formatRelative()</span><span class="num teal">3</span></span><span class="me">date.ts</span></div>
+            <div class="r c-teal" data-lane="2"><span class="ti"><span>apiFetch()</span><span class="num teal">4</span></span><span class="me">sessionClient.ts</span></div>
+            <div class="r c-grey dim" data-lane="0"><span class="ti"><span>5 test cases</span></span><span class="me">not counted</span></div>
+          </div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="flags" data-pv="rules">
+      <h2>Flags</h2>
+      <p>Rules only read lines the branch added. A flag says what was found, not that it's wrong.</p>
+      <figure class="pv" id="pv-rules">
+        <div class="pv-head"><span class="t">Rules</span><span class="status amber">5 flagged</span></div>
+        <div class="pv-body center">
+          <div class="rows" style="--railw: 30px">
+            <div class="r c-amber"><span class="ti"><span>Error swallowed</span><span class="num">1</span></span><span class="me">catch { return null }</span></div>
+            <div class="r c-amber"><span class="ti"><span>Env var with a fallback</span><span class="num">2</span></span><span class="me">?? "dev-secret"</span></div>
+            <div class="r c-amber"><span class="ti"><span>Type check bypassed</span><span class="num">5</span></span><span class="me">as any · @ts-ignore</span></div>
+            <div class="r c-amber"><span class="ti"><span>Assertion removed</span><span class="num">5</span></span><span class="me">− expect(…)</span></div>
+            <div class="r c-teal"><span class="ti"><span>Not connected</span><span class="num teal">3</span></span><span class="me">no call path</span></div>
+            <div class="r c-grey dim"><span class="ti"><span>Skipped</span><span class="chip dash">package-lock.json</span></span><span class="me">.glance.yml</span></div>
+          </div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="share" data-pv="publish">
+      <h2>Share it</h2>
+      <p><code>glance publish --pr</code> puts a secret link in the PR description. Publishing again updates the same link. Only names and calls are uploaded, never code.</p>
+      <figure class="pv" id="pv-publish">
+        <div class="pv-head"><span class="t">Rotate sessions across checkout <span>#42</span></span><span class="status">Open</span></div>
+        <div class="pv-body">
+          <div class="stack">
+            <div class="term"><span class="p">$ </span>glance publish --pr
+<span class="o">feature/session-rotation → main: 11 files, 14 functions, 5 flagged</span>
+<span class="u">https://glance.nishilfaldu.site/r/9xQ2mV7cLk0aTf3RzH1bWg</span></div>
+            <div class="rows" style="--railw: 30px">
+              <div class="r c-grey dim"><span class="ti"><span>Adds refresh tokens and rotates the session on checkout.</span></span></div>
+              <div class="r c-blue here"><span class="ti"><span>Review map</span><span class="chip blue">glance.nishilfaldu.site/r/9xQ2…</span></span><span class="me">you · now</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="pv-foot"><span class="pill sm line">#42 Linked</span><span style="color:var(--green)">+482</span><span style="color:var(--red)">−37</span></div>
+      </figure>
+    </section>
+
+    <section class="step" id="reference" data-pv="help">
+      <h2>Reference</h2>
+      <table>
+        <tr><td><code>glance</code></td><td>Open the map on localhost</td></tr>
+        <tr><td><code>glance publish</code></td><td>Upload it and print a secret link</td></tr>
+        <tr><td><code>glance json</code></td><td>Print the brief as JSON</td></tr>
+        <tr><td><code>--base &lt;ref&gt;</code></td><td>Compare against this branch</td></tr>
+        <tr><td><code>--working</code></td><td>Include uncommitted changes</td></tr>
+        <tr><td><code>--pr [n]</code></td><td>Link it on the pull request</td></tr>
+      </table>
+      <figure class="pv" id="pv-help">
+        <div class="pv-head"><span class="t">glance --help</span></div>
+        <div class="pv-body">
+          <div class="term" style="border:0;background:none;padding:0"><span class="o">Usage</span>
+  glance [options]           <span class="o">Open the review page for this branch</span>
+  glance publish [options]   <span class="o">Upload it and print a secret link</span>
+  glance json [options]      <span class="o">Print the brief as JSON</span>
+
+<span class="o">Options</span>
+  --base &lt;ref&gt;     <span class="o">Branch to compare against</span>
+  --head &lt;ref&gt;     <span class="o">Commit or branch to review (default: HEAD)</span>
+  --working        <span class="o">Include uncommitted and untracked changes</span>
+  --title &lt;text&gt;   <span class="o">Title shown on the page</span>
+  --pr [number]    <span class="o">With publish: link it on the pull request</span>
+  --port &lt;n&gt;       <span class="o">Port for the local page</span>
+  --no-open        <span class="o">Don't open a browser</span>
+
+<span class="o">Skip files with .glance.yml:</span>
+  skip:
+    - generated/**
+
+<span class="o">Publishing reads GLANCE_URL and GLANCE_PUBLISH_KEY,</span>
+<span class="o">or ~/.config/glance/config.json</span></div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="limits" data-pv="help">
+      <h2>Limits</h2>
+      <p>Functions are found in TypeScript and JavaScript only. Calls on objects (<code>db.insert()</code>) and path aliases (<code>@/lib</code>) aren't followed yet.</p>
+    </section>
+
+    <footer>
+      <span>Glance by <a href="https://nishilfaldu.site">Nishil Faldu</a></span>
+      <a href="/demo">Example</a>
+    </footer>
+  </main>
+
+  <div class="pane-col"><div class="pane" id="pane" aria-label="Preview"></div></div>
+</div>
+
+<script>
+  var frames = [].slice.call(document.querySelectorAll(".pv iframe"));
+
+  // Theme: system (no attribute on <html>), light or dark. Same key as the viewer, so a pick carries over to review pages,
+  // and it's applied to the embedded demos too.
+  (function () {
+    var buttons = document.querySelectorAll("#themes button");
+    function setOn(doc, t) {
+      if (!doc || !doc.documentElement) return;
+      if (t) doc.documentElement.dataset.theme = t;
+      else delete doc.documentElement.dataset.theme;
+    }
+    function apply(t) {
+      setOn(document, t);
+      frames.forEach(function (f) { try { setOn(f.contentDocument, t); } catch (e) {} });
+      buttons.forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.theme === (t || "system"))); });
+    }
+    apply(document.documentElement.dataset.theme);
+    buttons.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var t = b.dataset.theme === "system" ? null : b.dataset.theme;
+        apply(t);
+        try { if (t) localStorage.setItem("glance-theme", t); else localStorage.removeItem("glance-theme"); } catch (e) {}
+      });
+    });
+    // A demo that finishes loading after a pick reads the saved value itself; this covers storage being blocked.
+    frames.forEach(function (f) { f.addEventListener("load", function () { try { setOn(f.contentDocument, document.documentElement.dataset.theme); } catch (e) {} }); });
+  })();
+
+  document.querySelectorAll("[data-copy]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      if (!navigator.clipboard) return;
+      navigator.clipboard.writeText(b.dataset.copy).then(function () {
+        var use = b.querySelector("use");
+        b.dataset.done = "";
+        use.setAttribute("href", "#i-check");
+        setTimeout(function () { delete b.dataset.done; use.setAttribute("href", "#i-copy"); }, 1400);
+      });
+    });
+  });
+
+  var NS = "http://www.w3.org/2000/svg", marker = 0;
+
+  // Rails: each row gets a dot on its lane. data-links="a>b" joins rows by data-n; without it, consecutive rows join.
+  function drawRail(rows) {
+    var old = rows.querySelector(":scope > svg.rail");
+    if (old) old.remove();
+    var box = rows.getBoundingClientRect();
+    if (!box.width) return;
+    var list = [].slice.call(rows.querySelectorAll(":scope > .r"));
+    var at = {};
+    list.forEach(function (r) {
+      var dot = r.querySelector(":scope > .dot");
+      if (!dot) { dot = document.createElement("span"); dot.className = "dot"; r.insertBefore(dot, r.firstChild); }
+      var x = 27 + Number(r.dataset.lane || 0) * 16;
+      dot.style.left = x + "px";
+      var rr = r.getBoundingClientRect();
+      r._x = x;
+      r._y = rr.top - box.top + rr.height / 2;
+      r._c = getComputedStyle(r).getPropertyValue("--c").trim();
+      if (r.dataset.n) at[r.dataset.n] = r;
+    });
+    var pairs = [];
+    if (rows.dataset.links) {
+      rows.dataset.links.split(" ").forEach(function (p) { var e = p.split(">"); if (at[e[0]] && at[e[1]]) pairs.push([at[e[0]], at[e[1]]]); });
+    } else {
+      for (var i = 1; i < list.length; i++) pairs.push([list[i - 1], list[i]]);
+    }
+    var svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("class", "rail");
+    pairs.forEach(function (p) {
+      var a = p[0], b = p[1], d;
+      if (a._x === b._x) d = "M" + a._x + " " + a._y + " L" + b._x + " " + b._y;
+      else {
+        // Lane change: run down the source lane, then curve into the target's lane just above it
+        var bend = b._y - 22;
+        d = "M" + a._x + " " + a._y + " L" + a._x + " " + bend + " C" + a._x + " " + (bend + 14) + " " + b._x + " " + (b._y - 12) + " " + b._x + " " + b._y;
+      }
+      var path = document.createElementNS(NS, "path");
+      path.setAttribute("d", d);
+      path.setAttribute("stroke", a._c || "currentColor");
+      path.setAttribute("opacity", ".55");
+      svg.appendChild(path);
+    });
+    rows.insertBefore(svg, rows.firstChild);
+  }
+
+  // Arrows between chips: data-edges="a>b" links [data-n=a] to [data-n=b], sideways or downwards.
+  function drawEdges(net) {
+    var old = net.querySelector(":scope > svg.edges");
+    if (old) old.remove();
+    var box = net.getBoundingClientRect();
+    if (!box.width) return;
+    var id = "ah" + ++marker;
+    var svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("class", "edges");
+    svg.innerHTML = '<defs><marker id="' + id + '" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L8,4 L0,8 z"/></marker></defs>';
+    net.dataset.edges.split(" ").forEach(function (pair) {
+      var ends = pair.split(">");
+      var a = net.querySelector('[data-n="' + ends[0] + '"]'), b = net.querySelector('[data-n="' + ends[1] + '"]');
+      if (!a || !b) return;
+      var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(), d;
+      var ax = ra.left - box.left, ay = ra.top - box.top, bx = rb.left - box.left, by = rb.top - box.top;
+      if (rb.left >= ra.right + 8) {
+        var x1 = ax + ra.width + 4, y1 = ay + ra.height / 2, x2 = bx - 5, y2 = by + rb.height / 2, m = (x1 + x2) / 2;
+        d = "M" + x1 + " " + y1 + " C" + m + " " + y1 + " " + m + " " + y2 + " " + x2 + " " + y2;
+      } else {
+        var sx = ax + ra.width / 2, sy = ay + ra.height + 4, tx = bx + rb.width / 2, ty = by - 5, my = (sy + ty) / 2;
+        d = "M" + sx + " " + sy + " C" + sx + " " + my + " " + tx + " " + my + " " + tx + " " + ty;
+      }
+      var p = document.createElementNS(NS, "path");
+      p.setAttribute("d", d);
+      p.setAttribute("marker-end", "url(#" + id + ")");
+      if (a.classList.contains("ghost") || b.classList.contains("ghost")) p.setAttribute("class", "soft");
+      svg.appendChild(p);
+    });
+    net.insertBefore(svg, net.firstChild);
+  }
+  function drawAll() {
+    document.querySelectorAll(".rows").forEach(drawRail);
+    document.querySelectorAll(".net[data-edges]").forEach(drawEdges);
+  }
+
+  // Cards: inline under their section on narrow screens; on wide ones they move into the sticky pane
+  // and the one for the section you're reading fades in. Iframes load once they're placed, so they load once.
+  var pane = document.getElementById("pane");
+  var figs = [].slice.call(document.querySelectorAll("figure.pv"));
+  var slots = figs.map(function (f) { var s = document.createComment("pv"); f.parentNode.insertBefore(s, f); return s; });
+  var wide = matchMedia("(min-width: 1040px)");
+  var active = "map";
+  function show(name) {
+    active = name;
+    figs.forEach(function (f) { f.classList.toggle("on", f.id === "pv-" + name); });
+  }
+  function place() {
+    figs.forEach(function (f, i) {
+      if (wide.matches) pane.appendChild(f);
+      else slots[i].parentNode.insertBefore(f, slots[i].nextSibling);
+    });
+    frames.forEach(function (f) { if (!f.src) f.src = f.dataset.src; });
+    show(active);
+    drawAll();
+  }
+
+  var steps = [].slice.call(document.querySelectorAll(".step"));
+  // The section being read is the last one whose top has passed 45% of the window, or the last one at the very bottom.
+  var ticking = false;
+  function pick() {
+    ticking = false;
+    var cur = steps[0];
+    steps.forEach(function (s) { if (s.getBoundingClientRect().top < innerHeight * 0.45) cur = s; });
+    if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) cur = steps[steps.length - 1];
+    if (cur.dataset.pv !== active) show(cur.dataset.pv);
+  }
+  addEventListener("scroll", function () { if (!ticking) { ticking = true; requestAnimationFrame(pick); } }, { passive: true });
+
+  place();
+  wide.addEventListener("change", place);
+  var queued = false;
+  addEventListener("resize", function () {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(function () { queued = false; drawAll(); });
+  });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawAll);
+</script>
 </body>
 </html>

@@ -1,0 +1,293 @@
+{
+  "version": 1,
+  "repo": "storefront",
+  "title": "Rotate sessions across checkout",
+  "head": "feature/session-rotation",
+  "base": "main",
+  "root": {
+    "name": "storefront",
+    "files": [
+      {
+        "name": ".glance.yml",
+        "icon": "yaml",
+        "state": "same"
+      },
+      {
+        "name": "package.json",
+        "icon": "json",
+        "state": "changed",
+        "fns": [
+          {
+            "name": "jose",
+            "kind": "dep",
+            "state": "new"
+          }
+        ]
+      }
+    ],
+    "dirs": [
+      {
+        "name": "docs",
+        "color": "#42a5f5",
+        "files": [
+          {
+            "name": "sessions.md",
+            "icon": "md",
+            "state": "skip"
+          }
+        ],
+        "dirs": []
+      },
+      {
+        "name": "generated",
+        "color": "#78909c",
+        "files": [
+          {
+            "name": "client.ts",
+            "icon": "ts",
+            "state": "skip"
+          }
+        ],
+        "dirs": []
+      },
+      {
+        "name": "src",
+        "color": "#4caf50",
+        "files": [],
+        "dirs": [
+          {
+            "name": "api",
+            "color": "#7e57c2",
+            "files": [
+              {
+                "name": "checkout.ts",
+                "icon": "ts",
+                "state": "changed",
+                "fns": [
+                  {
+                    "name": "handleCheckout()",
+                    "kind": "fn",
+                    "state": "changed",
+                    "calls": [
+                      "src/auth/session.ts#rotateSession()"
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "routes.ts",
+                "icon": "ts",
+                "state": "changed",
+                "fns": [
+                  {
+                    "name": "POST /session/refresh",
+                    "kind": "route",
+                    "state": "new",
+                    "calls": [
+                      "src/auth/refresh.ts#refreshIfExpiring()"
+                    ]
+                  }
+                ]
+              }
+            ],
+            "dirs": []
+          },
+          {
+            "name": "auth",
+            "color": "#ef6c00",
+            "files": [
+              {
+                "name": "refresh.ts",
+                "icon": "ts",
+                "state": "new",
+                "fns": [
+                  {
+                    "name": "refreshIfExpiring()",
+                    "kind": "fn",
+                    "state": "new",
+                    "calls": [
+                      "src/auth/session.ts#rotateSession()"
+                    ],
+                    "spot": 1,
+                    "flags": [
+                      "error swallowed"
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "session.ts",
+                "icon": "ts",
+                "state": "changed",
+                "spot": 2,
+                "flags": [
+                  "env var with a hard-coded fallback"
+                ],
+                "fns": [
+                  {
+                    "name": "signToken()",
+                    "kind": "fn",
+                    "state": "new",
+                    "calls": [
+                      "package.json#jose"
+                    ]
+                  },
+                  {
+                    "name": "createSession()",
+                    "kind": "fn",
+                    "state": "changed",
+                    "calls": [
+                      "src/auth/session.ts#signToken()"
+                    ]
+                  },
+                  {
+                    "name": "rotateSession()",
+                    "kind": "fn",
+                    "state": "new",
+                    "calls": [
+                      "src/auth/session.ts#createSession()"
+                    ]
+                  }
+                ]
+              }
+            ],
+            "dirs": []
+          },
+          {
+            "name": "payments",
+            "color": "#29b6f6",
+            "files": [
+              {
+                "name": "stripe.ts",
+                "icon": "ts",
+                "state": "same"
+              }
+            ],
+            "dirs": []
+          },
+          {
+            "name": "utils",
+            "color": "#8d6e63",
+            "files": [
+              {
+                "name": "date.ts",
+                "icon": "ts",
+                "state": "changed",
+                "fns": [
+                  {
+                    "name": "formatRelative()",
+                    "kind": "fn",
+                    "state": "changed",
+                    "spot": 3,
+                    "flags": [
+                      "not connected to the main change"
+                    ],
+                    "stray": true
+                  }
+                ]
+              }
+            ],
+            "dirs": []
+          },
+          {
+            "name": "web",
+            "color": "#29b6f6",
+            "files": [
+              {
+                "name": "orderHistory.ts",
+                "icon": "ts",
+                "state": "same"
+              },
+              {
+                "name": "sessionClient.ts",
+                "icon": "ts",
+                "state": "changed",
+                "fns": [
+                  {
+                    "name": "apiFetch()",
+                    "kind": "fn",
+                    "state": "changed",
+                    "spot": 4,
+                    "flags": [
+                      "not connected to the main change"
+                    ],
+                    "stray": true
+                  }
+                ]
+              }
+            ],
+            "dirs": []
+          }
+        ]
+      },
+      {
+        "name": "tests",
+        "color": "#26a69a",
+        "files": [
+          {
+            "name": "checkout.test.ts",
+            "icon": "test",
+            "state": "changed",
+            "fns": [
+              {
+                "name": "charges an authenticated user",
+                "kind": "case",
+                "state": "changed",
+                "calls": [
+                  "src/auth/session.ts#createSession()",
+                  "src/api/checkout.ts#handleCheckout()"
+                ],
+                "spot": 5,
+                "flags": [
+                  "type or lint check bypassed",
+                  "assertion removed"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "session.test.ts",
+            "icon": "test",
+            "state": "changed",
+            "fns": [
+              {
+                "name": "creates and reads a session",
+                "kind": "case",
+                "state": "changed",
+                "calls": [
+                  "src/auth/session.ts#createSession()"
+                ]
+              },
+              {
+                "name": "ends a session",
+                "kind": "case",
+                "state": "changed",
+                "calls": [
+                  "src/auth/session.ts#createSession()"
+                ]
+              },
+              {
+                "name": "rotates a session and invalidates the old token",
+                "kind": "case",
+                "state": "new",
+                "calls": [
+                  "src/auth/session.ts#createSession()",
+                  "src/auth/session.ts#rotateSession()"
+                ]
+              },
+              {
+                "name": "does not rotate an unknown token",
+                "kind": "case",
+                "state": "new",
+                "calls": [
+                  "src/auth/session.ts#rotateSession()"
+                ]
+              }
+            ]
+          }
+        ],
+        "dirs": []
+      }
+    ]
+  }
+}
