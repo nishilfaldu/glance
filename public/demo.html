@@ -10,7 +10,7 @@
 <script>try { var t = localStorage.getItem("glance-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <!-- ?embed: shown inside the docs page, without the theme switch; ?tab=map|calls picks the first tab -->
 <script>var params = new URLSearchParams(location.search); if (params.has("embed")) document.documentElement.classList.add("embed");</script>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Inter:wght@400;500&display=swap">
 <style>
   /* Layout: two tabs — repo map (whole-repo minimap) and call graph (affected paths down to functions + calls), same chips in both */
   :root {
@@ -125,9 +125,19 @@
     border: 1px solid var(--line); border-radius: 5px; padding: 3px 10px; cursor: pointer; }
   .strip button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-  .embed body { padding-block: 20px 24px; background: transparent; }
-  .embed .themes { display: none; }
-  .embed .card { padding: 16px 18px; }
+  /* Embedded in the docs: the docs card supplies the title and frame, so drop ours and take the docs' softer look */
+  :root.embed { --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --fg: #1f1f1f; --line: #ececec; --chip: #f4f4f3; --accent: #1f1f1f; --surface: #ffffff; }
+  @media (prefers-color-scheme: dark) { :root.embed:not([data-theme="light"]) { --fg: #ececec; --line: #2a2a2a; --chip: #252525; --accent: #ececec; --surface: #1b1b1b; } }
+  :root.embed[data-theme="dark"] { --fg: #ececec; --line: #2a2a2a; --chip: #252525; --accent: #ececec; --surface: #1b1b1b; }
+  .embed body { padding: 0; background: transparent; }
+  .embed .head { display: none; }
+  .embed .wrap { max-width: none; }
+  .embed .card { border: 0; border-radius: 0; background: transparent; padding: 6px 26px 22px; }
+  .embed .group, .embed .fbox { border-radius: 10px; }
+  .embed .fn, .embed .file, .embed .folded { border-radius: 8px; }
+  .embed .strip { border-radius: 999px; padding: 6px 6px 6px 16px; border: 0; }
+  .embed .strip button { border-radius: 999px; border: 0; padding: 5px 14px; }
 
   @media (max-width: 520px) {
     .row { grid-template-columns: 1fr; gap: 4px; }
