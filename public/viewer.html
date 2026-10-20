@@ -525,7 +525,7 @@
       ["risk", '<span class="badge">①</span>', "risky pattern"],
       ["stray", '<span class="badge stray">①</span>', "not connected to the main change"],
       ["new", '<span class="new"></span>', "new"],
-      ["skip", '<span class="skipped"></span>', "skipped: lockfile, generated, or listed in .glance.yml"],
+      ["skip", '<span class="skipped"></span>', "skipped"],
     ].filter(function (k) { return seen[k[0]]; });
     var legend = document.getElementById("legend");
     legend.innerHTML = keys.map(function (k) { return '<span class="key">' + k[1] + k[2] + "</span>"; }).join("");
