@@ -28,7 +28,7 @@ Blob store (a store's access can't change later) and set its
 `BLOB_READ_WRITE_TOKEN`, or put it in `~/.config/glance/config.json`:
 
 ```json
-{ "blobToken": "vercel_blob_rw_…", "url": "https://glance-mu-three.vercel.app" }
+{ "blobToken": "vercel_blob_rw_…", "url": "https://glance.nishilfaldu.site" }
 ```
 
 `url` (or `GLANCE_URL`) is the site that shows the page; it defaults to the one

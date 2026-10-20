@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { gitDir } from "./git.js";
 
-const DEFAULT_URL = "https://glance-mu-three.vercel.app";
+const DEFAULT_URL = "https://glance.nishilfaldu.site";
 
 // Publish settings come from env vars first, then ~/.config/glance/config.json. Briefs go to the publisher's
 // own Vercel Blob store (BLOB_READ_WRITE_TOKEN); the Glance site at url only serves the viewer.
