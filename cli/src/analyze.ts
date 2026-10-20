@@ -9,7 +9,6 @@ import { Modules } from "./modules.js";
 
 const TEST_FILE = /(^|\/)(__tests__|tests?|spec)\/|\.(test|spec)\.[cm]?[jt]sx?$/;
 const DEP_FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"] as const;
-const MAX_UNCHANGED_SHOWN = 12;
 
 const FOLDER_COLORS: Record<string, string> = {
   src: "#4caf50", app: "#4caf50", lib: "#8d6e63", utils: "#8d6e63", helpers: "#8d6e63",
@@ -252,16 +251,7 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }:
       node = only;
       name += `/${only.name}`;
     }
-    const unchanged = node.files.filter((p) => !changes.has(p));
-    const shown = new Set([...node.files.filter((p) => changes.has(p)), ...unchanged.slice(0, MAX_UNCHANGED_SHOWN)]);
-    const out: BriefDir = {
-      name,
-      color: folderColor(name),
-      files: node.files.filter((p) => shown.has(p)).map(fileEntry),
-      dirs: [...node.dirs.values()].map(build),
-    };
-    if (unchanged.length > MAX_UNCHANGED_SHOWN) out.more = unchanged.length - MAX_UNCHANGED_SHOWN;
-    return out;
+    return { name, color: folderColor(name), files: node.files.map(fileEntry), dirs: [...node.dirs.values()].map(build) };
   }
 
   // Folders first, then root files, the order the viewer draws them in.

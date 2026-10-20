@@ -25,7 +25,6 @@ export interface BriefDir {
   color: string;
   files: BriefFile[];
   dirs: BriefDir[];
-  more?: number; // unchanged files left out of the list
 }
 
 export interface Brief {
