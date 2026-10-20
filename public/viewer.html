@@ -268,10 +268,22 @@
     function dirLabel(name, color) {
       return '<span class="dir">' + icon("dir", color) + esc(name) + "/</span>";
     }
+    // One number per rule, in the order the map reads, so ② means the same thing everywhere.
+    // Briefs from before "not connected" was dropped still carry it; it gets no number.
+    var ruleNo = {}, rules = [];
+    function eachEntry(dir, visit, top) {
+      function files() { (dir.files || []).forEach(function (f) { [f].concat(f.fns || []).forEach(function (x) { visit(x, f); }); }); }
+      function dirs() { (dir.dirs || []).forEach(function (sub) { if (!sub.collapsed) eachEntry(sub, visit, false); }); }
+      if (top) { dirs(); files(); } else { files(); dirs(); }
+    }
+    function ruleFlags(x) { return (x.flags || []).filter(function (f) { return f !== "not connected to the main change"; }); }
+    eachEntry(data.root, function (x) {
+      ruleFlags(x).forEach(function (f) { if (!ruleNo[f]) rules.push(f), ruleNo[f] = rules.length; });
+    }, true);
     function badge(x) {
-      // Briefs from before "not connected" was dropped still mark it; a spot with only that flag gets no badge.
-      if (!x.spot || (x.stray && (x.flags || []).length < 2)) return "";
-      return '<span class="badge">' + (marks[x.spot] || x.spot) + "</span>";
+      return ruleFlags(x).map(function (f) {
+        return '<span class="badge" title="' + esc(f) + '">' + (marks[ruleNo[f]] || ruleNo[f]) + "</span>";
+      }).join("");
     }
     function newDot(x) { return x.state === "new" ? '<span class="new" title="new"></span>' : ""; }
     function fileHead(f) { return icon(f.icon) + esc(f.name) + newDot(f) + badge(f); }
@@ -516,25 +528,17 @@
     }
     refreshDone();
 
-    // Legend: only the markers this brief uses
+    // Legend: each rule that matched, by number, then the other markers this brief uses
     var seen = {};
-    (function scan(dir) {
-      (dir.files || []).forEach(function (f) {
-        [f].concat(f.fns || []).forEach(function (x) {
-          if (badge(x)) seen.risk = true;
-          if (x.state === "new") seen.new = true;
-        });
-        if (f.state === "skip") seen.skip = true;
-      });
-      (dir.dirs || []).forEach(scan);
-    })(root);
-    var keys = [
-      ["risk", '<span class="badge">①</span>', "risky pattern"],
-      ["new", '<span class="new"></span>', "new"],
-      ["skip", '<span class="skipped"></span>', "skipped"],
-    ].filter(function (k) { return seen[k[0]]; });
+    eachEntry(root, function (x, f) {
+      if (x.state === "new") seen.new = true;
+      if (f.state === "skip") seen.skip = true;
+    }, true);
+    var keys = rules.map(function (f) { return ['<span class="badge">' + (marks[ruleNo[f]] || ruleNo[f]) + "</span>", esc(f)]; });
+    if (seen.new) keys.push(['<span class="new"></span>', "new"]);
+    if (seen.skip) keys.push(['<span class="skipped"></span>', "skipped"]);
     var legend = document.getElementById("legend");
-    legend.innerHTML = keys.map(function (k) { return '<span class="key">' + k[1] + k[2] + "</span>"; }).join("");
+    legend.innerHTML = keys.map(function (k) { return '<span class="key">' + k[0] + k[1] + "</span>"; }).join("");
     legend.hidden = !keys.length;
 
     function clearSel() {
