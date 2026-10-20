@@ -165,6 +165,12 @@
   .term .p, .term .o { color: var(--faint); }
   .term .u { color: var(--blue); }
 
+  /* Under the hood: an eyebrow over the first step, linked pipeline rows, diff colors in terminals */
+  .eyebrow { font-size: 14px; color: var(--faint); margin: 0 0 10px; }
+  .step.under { margin-top: 120px; }
+  a.r { color: inherit; text-decoration: none; }
+  .term .a { color: var(--green); } .term .d { color: var(--red); } .term .h { color: var(--blue); }
+
   /* Reference */
   table { width: 100%; border-collapse: collapse; margin: 4px 0 0; font-size: 15px; }
   td { padding: 9px 12px 9px 0; border-top: 1px solid var(--line); vertical-align: top; color: var(--muted); }
@@ -245,20 +251,89 @@
       </figure>
     </section>
 
-    <section class="step" id="how" data-pv="pipe">
+    <section class="step" id="share" data-pv="publish">
+      <h2>Share it</h2>
+      <p>Nothing leaves your machine until you publish. <code>glance publish --pr</code> uploads the brief to your own Vercel Blob store and puts the link in the PR description. The store and id sit after the <code>#</code>, so this site never sees them. Publishing again updates the same link. Only names and calls are uploaded, never code.</p>
+      <figure class="pv" id="pv-publish">
+        <div class="pv-head"><span class="t">Rotate sessions across checkout <span>#42</span></span><span class="status">Open</span></div>
+        <div class="pv-body">
+          <div class="stack">
+            <div class="term"><span class="p">$ </span>export BLOB_READ_WRITE_TOKEN=vercel_blob_rw_…
+<span class="p">$ </span>glance publish --pr
+<span class="o">feature/session-rotation → main: 11 files, 14 functions, 5 flagged</span>
+<span class="u">https://glance.nishilfaldu.site/r#k3x9d2/9xQ2mV7cLk0aTf3RzH1bWg</span></div>
+            <div class="rows" style="--railw: 30px">
+              <div class="r c-grey dim"><span class="ti"><span>Adds refresh tokens and rotates the session on checkout.</span></span></div>
+              <div class="r c-blue here"><span class="ti"><span>Review map</span><span class="chip blue">glance.nishilfaldu.site/r#k3x9…</span></span><span class="me">you · now</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="pv-foot"><span class="pill sm line">#42 Linked</span><span style="color:var(--green)">+482</span><span style="color:var(--red)">−37</span></div>
+      </figure>
+    </section>
+
+    <section class="step under" id="how" data-pv="pipe">
+      <p class="eyebrow">Under the hood</p>
       <h2>How it works</h2>
-      <p>No AI. Glance reads git and parses your code with the TypeScript compiler, so the same branch always gives the same map.</p>
+      <p>No AI. Glance reads git and parses your code with the TypeScript compiler, so the same branch always gives the same map. Here's the whole trip, using the example above.</p>
       <figure class="pv" id="pv-pipe">
         <div class="pv-head"><span class="t">From branch to map</span></div>
         <div class="pv-body center">
           <div class="rows" style="--railw: 30px">
-            <div class="r c-grey"><span class="ti"><span>Find where the branch left main</span></span><span class="me">git merge-base</span></div>
-            <div class="r c-grey"><span class="ti"><span>Read the changed lines</span></span><span class="me">git diff</span></div>
-            <div class="r c-grey"><span class="ti"><span>Drop lockfiles and generated code</span></span><span class="me">skip rules</span></div>
-            <div class="r c-blue"><span class="ti"><span>Map each line to its function</span></span><span class="me">TypeScript</span></div>
-            <div class="r c-blue"><span class="ti"><span>Follow calls through imports</span></span><span class="me">imports</span></div>
-            <div class="r c-amber"><span class="ti"><span>Number each rule that matches</span></span><span class="me">flags</span></div>
-            <div class="r c-green here"><span class="ti"><span>Write the brief</span><span class="chip grey">brief.json</span></span><span class="me">no source code</span></div>
+            <a class="r c-grey" href="#base"><span class="ti"><span>Find where the branch started</span></span><span class="me">git merge-base</span></a>
+            <a class="r c-grey" href="#diff"><span class="ti"><span>Read what changed, skip the noise</span></span><span class="me">git diff</span></a>
+            <a class="r c-blue" href="#functions"><span class="ti"><span>Map each line to its function</span></span><span class="me">TypeScript</span></a>
+            <a class="r c-blue" href="#calls"><span class="ti"><span>Follow calls through imports</span></span><span class="me">imports</span></a>
+            <a class="r c-amber" href="#flags"><span class="ti"><span>Number each rule that matches</span></span><span class="me">flags</span></a>
+            <a class="r c-green" href="#brief"><span class="ti"><span>Write the brief</span><span class="chip grey">brief.json</span></span><span class="me">no source code</span></a>
+            <a class="r c-green" href="#drawing"><span class="ti"><span>Draw it</span></span><span class="me">viewer.html</span></a>
+          </div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="base" data-pv="base">
+      <h2>Where the branch starts</h2>
+      <p>Diffing against main's latest commit would mix in everything merged since you branched. So Glance asks git for the <strong>merge base</strong>, the last commit your branch and main share, and compares from there.</p>
+      <p>Main is origin's default branch, then <code>main</code> or <code>master</code>. <code>--base</code> picks another.</p>
+      <figure class="pv" id="pv-base">
+        <div class="pv-head"><span class="t">~/storefront</span></div>
+        <div class="pv-body">
+          <div class="stack">
+            <div class="rows" data-links="m1>m2 m2>b f1>b" style="--railw: 54px">
+              <div class="r c-grey dim" data-n="m1" data-lane="0"><span class="ti"><span>Fix pagination on orders</span></span><span class="me">main</span></div>
+              <div class="r c-grey dim" data-n="m2" data-lane="0"><span class="ti"><span>Bump eslint</span></span><span class="me">main</span></div>
+              <div class="r c-blue" data-n="f1" data-lane="1"><span class="ti"><span>Rotate sessions across checkout</span></span><span class="me">your branch</span></div>
+              <div class="r c-green here" data-n="b" data-lane="0"><span class="ti"><span>Initial storefront</span><span class="chip grey">2d83f0b</span></span><span class="me">merge base</span></div>
+            </div>
+            <div class="term"><span class="p">$ </span>git merge-base main feature/session-rotation
+<span class="o">2d83f0b</span></div>
+          </div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="diff" data-pv="diff">
+      <h2>Reading the diff</h2>
+      <p><code>git diff --name-status -M</code> lists each file as added, modified or renamed. Deleted files are gone at the head, so they're left out.</p>
+      <p>Some files are noise: lockfiles, minified bundles, files that say <code>@generated</code> or <code>DO NOT EDIT</code> in their first lines, and anything under <code>skip:</code> in <code>.glance.yml</code>. They stay on the map, dashed, but aren't read. For the rest, <code>-U0</code> drops the context lines, so every hunk header points at exactly the lines that changed.</p>
+      <figure class="pv" id="pv-diff">
+        <div class="pv-head"><span class="t">~/storefront</span></div>
+        <div class="pv-body">
+          <div class="stack">
+            <div class="term"><span class="p">$ </span>git diff --name-status -M 2d83f0b HEAD
+M  docs/sessions.md      <span class="o">skip: .glance.yml</span>
+M  generated/client.ts   <span class="o">skip: @generated</span>
+A  src/auth/refresh.ts
+M  src/auth/session.ts
+<span class="o">… 7 more</span></div>
+            <div class="term"><span class="p">$ </span>git diff -U0 2d83f0b HEAD -- src/auth/session.ts
+<span class="h">@@ -7,0 +9 @@</span>  <span class="o">nothing removed, 1 added at line 9</span>
+<span class="a">+  rotatedFrom?: string;</span>
+<span class="h">@@ -10 +12,6 @@</span>  <span class="o">line 10 replaced by 12–17</span>
+<span class="d">-const SESSION_TTL_MINUTES = 30;</span>
+<span class="a">+export interface SessionOptions {</span>
+<span class="o">…</span></div>
           </div>
         </div>
       </figure>
@@ -266,7 +341,8 @@
 
     <section class="step" id="functions" data-pv="units">
       <h2>Lines become functions</h2>
-      <p>Every changed line belongs to the innermost function around it. Lines outside any function belong to the file.</p>
+      <p>Each changed file goes through the TypeScript compiler's parser: no build, no tsconfig, no type checking, so any TS or JS file works as it is. A function is a declaration, an arrow function with a name, a class method, a route handler keyed like <code>"POST /session"</code>, or a test case <code>it("…", () =&gt; …)</code>.</p>
+      <p>An added line belongs to the innermost function around it, and a removed line to whatever now sits where it was. Lines outside any function belong to the file. If main's copy of the file already had a function by that name, it's changed; otherwise it's new. In <code>package.json</code>, each dependency whose version moved gets its own chip.</p>
       <figure class="pv" id="pv-units">
         <div class="pv-head"><span class="t">session.ts <span>src/auth</span></span><span class="num">2</span></div>
         <div class="pv-body">
@@ -307,7 +383,8 @@
 
     <section class="step" id="calls" data-pv="resolve">
       <h2>Calls connect them</h2>
-      <p>Each call is followed through the file's imports to the function it lands on. When both ends changed, the call graph draws an arrow.</p>
+      <p>Inside each function, Glance collects what it calls: <code>foo()</code>, <code>new Foo()</code>, <code>&lt;Foo /&gt;</code>, and <code>ns.foo()</code> through <code>import * as ns</code>. A name is looked up in the same file first, then in the imports. A relative import is tried with each extension and as a folder's <code>index</code>; a package lands on its chip in the nearest <code>package.json</code>.</p>
+      <p>When both ends changed, the call graph draws an arrow. <code>db.insert()</code> isn't followed: knowing what <code>db</code> is takes type information, and Glance never runs the type checker.</p>
       <figure class="pv" id="pv-resolve">
         <div class="pv-head"><span class="t">checkout.ts <span>src/api</span></span></div>
         <div class="pv-body">
@@ -331,7 +408,8 @@
 
     <section class="step" id="flags" data-pv="rules">
       <h2>Flags</h2>
-      <p>Rules only read lines the branch added. Each rule keeps one number across the page; click a numbered chip and the bar at the bottom names its rule. A flag says what was found, not that it's wrong.</p>
+      <p>Rules only read lines the branch added. Two are patterns on a line: a <code>process.env</code> read with a literal fallback, and <code>as any</code>, <code>@ts-ignore</code> or <code>eslint-disable</code>. Two need more than a line: a <code>catch</code> that's empty or just returns <code>null</code>, <code>[]</code> and the like, found in the syntax tree; and in tests, an <code>expect</code> or <code>assert</code> line that was removed and not added back.</p>
+      <p>Each rule keeps one number across the page; click a numbered chip and the bar at the bottom names its rule. A flag says what was found, not that it's wrong.</p>
       <figure class="pv" id="pv-rules">
         <div class="pv-head"><span class="t">Rules</span><span class="status amber">4 rules</span></div>
         <div class="pv-body center">
@@ -346,24 +424,42 @@
       </figure>
     </section>
 
-    <section class="step" id="share" data-pv="publish">
-      <h2>Share it</h2>
-      <p>Nothing leaves your machine until you publish. <code>glance publish --pr</code> uploads the brief to your own Vercel Blob store and puts the link in the PR description. The store and id sit after the <code>#</code>, so this site never sees them. Publishing again updates the same link. Only names and calls are uploaded, never code.</p>
-      <figure class="pv" id="pv-publish">
-        <div class="pv-head"><span class="t">Rotate sessions across checkout <span>#42</span></span><span class="status">Open</span></div>
+    <section class="step" id="brief" data-pv="brief">
+      <h2>What gets written</h2>
+      <p>All of it lands in one JSON file, the brief: the folder tree, each file's state, the touched functions with their calls, and the flags. Names only, never a line of source. The local page reads it from memory, and <code>glance publish</code> uploads exactly this file. Run <code>glance json</code> to see yours.</p>
+      <figure class="pv" id="pv-brief">
+        <div class="pv-head"><span class="t">brief.json <span>src/auth/session.ts</span></span></div>
         <div class="pv-body">
-          <div class="stack">
-            <div class="term"><span class="p">$ </span>export BLOB_READ_WRITE_TOKEN=vercel_blob_rw_…
-<span class="p">$ </span>glance publish --pr
-<span class="o">feature/session-rotation → main: 11 files, 14 functions, 5 flagged</span>
-<span class="u">https://glance.nishilfaldu.site/r#k3x9d2/9xQ2mV7cLk0aTf3RzH1bWg</span></div>
-            <div class="rows" style="--railw: 30px">
-              <div class="r c-grey dim"><span class="ti"><span>Adds refresh tokens and rotates the session on checkout.</span></span></div>
-              <div class="r c-blue here"><span class="ti"><span>Review map</span><span class="chip blue">glance.nishilfaldu.site/r#k3x9…</span></span><span class="me">you · now</span></div>
-            </div>
+          <div class="term">{
+  "name": "session.ts", "state": "changed",
+  "flags": ["env var with a hard-coded fallback"],
+  "fns": [
+    { "name": "signToken()", "state": "new",
+      "calls": ["package.json#jose"] },
+    { "name": "createSession()", "state": "changed",
+      "calls": ["src/auth/session.ts#signToken()"] },
+    { "name": "rotateSession()", "state": "new",
+      "calls": ["src/auth/session.ts#createSession()"] }
+  ]
+}</div>
+        </div>
+      </figure>
+    </section>
+
+    <section class="step" id="drawing" data-pv="drawing">
+      <h2>Drawing it</h2>
+      <p>The page is one HTML file: no framework, no graph library. The repo map is nested boxes that wrap like text. The call graph puts folders, files and functions in columns. Each column starts just past the widest label in the one before, every function gets its own row, and each parent sits centered on its children.</p>
+      <p>Lines are SVG curves. Calls bend out to the right of the function column, so they never cross the tree.</p>
+      <figure class="pv" id="pv-drawing">
+        <div class="pv-head"><span class="t">Laying out the call graph</span></div>
+        <div class="pv-body center">
+          <div class="rows" style="--railw: 30px">
+            <div class="r c-grey"><span class="ti"><span>Folder, file, function: one column each</span></span><span class="me">depth</span></div>
+            <div class="r c-grey"><span class="ti"><span>Next column starts 34px past the widest label</span></span><span class="me">measure</span></div>
+            <div class="r c-blue"><span class="ti"><span>Functions take rows, parents center on them</span></span><span class="me">rows</span></div>
+            <div class="r c-blue here"><span class="ti"><span>Calls bend out to the right</span></span><span class="me">SVG</span></div>
           </div>
         </div>
-        <div class="pv-foot"><span class="pill sm line">#42 Linked</span><span style="color:var(--green)">+482</span><span style="color:var(--red)">−37</span></div>
       </figure>
     </section>
 
