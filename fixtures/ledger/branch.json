@@ -1,0 +1,9 @@
+{
+  "base": "Initial ledger",
+  "branch": "feature/tax-inclusive-pricing",
+  "title": "Add tax-inclusive pricing to invoices",
+  "delete": [
+    "apps/api/src/lib/legacyTax.ts",
+    "apps/api/src/services/email/mailer.ts"
+  ]
+}

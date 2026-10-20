@@ -39,3 +39,16 @@ page. It reads `GLANCE_PUBLISH_KEY` and `GLANCE_URL`, or
 
 Links are secret URLs: 128-bit random ids, not indexed by search engines.
 Pushes to `main` deploy to Vercel.
+
+## Fixtures
+
+`fixtures/<name>/` holds a small codebase to review: `main/` is the base, `branch/` overlays the files the
+branch changes, and `branch.json` names the branch and the paths it deletes. Build one into its own git repo
+under `examples/`, then run glance there:
+
+```sh
+node fixtures/build.mjs ledger
+cd examples/ledger && glance
+```
+
+`ledger` is a billing monorepo (API, web app, shared package) whose branch adds tax-inclusive pricing.

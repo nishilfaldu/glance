@@ -1,0 +1,7 @@
+{
+  "name": "@ledger/api",
+  "dependencies": {
+    "pino": "9.4.0",
+    "stripe": "14.21.0"
+  }
+}

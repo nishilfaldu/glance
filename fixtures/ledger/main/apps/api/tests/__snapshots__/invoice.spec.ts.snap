@@ -1,0 +1,3 @@
+exports[`buildInvoice totals the lines 1`] = `
+{ "subtotal": 100, "tax": 8, "total": 108 }
+`;

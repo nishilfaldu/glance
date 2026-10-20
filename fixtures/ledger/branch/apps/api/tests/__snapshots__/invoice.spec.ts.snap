@@ -1,0 +1,7 @@
+exports[`buildInvoice totals the lines 1`] = `
+{ "subtotal": 100, "tax": 8, "total": 108, "taxInclusive": false }
+`;
+
+exports[`buildInvoice keeps the total when prices include tax 1`] = `
+{ "subtotal": 108, "tax": 8, "total": 108, "taxInclusive": true }
+`;
