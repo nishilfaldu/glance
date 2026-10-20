@@ -1,25 +1,42 @@
 {
   "framework": null,
   "buildCommand": "",
+  "installCommand": "echo the site is static, nothing to install",
   "outputDirectory": "public",
   "rewrites": [
-    { "source": "/r", "destination": "/viewer.html" },
-    { "source": "/r/:id", "destination": "/viewer.html" }
+    {
+      "source": "/r",
+      "destination": "/viewer.html"
+    },
+    {
+      "source": "/r/:id",
+      "destination": "/viewer.html"
+    }
   ],
   "redirects": [
-    { "source": "/demo", "destination": "/r/sample", "permanent": false }
+    {
+      "source": "/demo",
+      "destination": "/r/sample",
+      "permanent": false
+    }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "Referrer-Policy", "value": "no-referrer" }
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        }
       ]
     },
     {
       "source": "/(r|viewer\\.html|sample\\.json)(.*)",
       "headers": [
-        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
       ]
     }
   ]

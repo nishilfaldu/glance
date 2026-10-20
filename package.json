@@ -13,13 +13,14 @@
   ],
   "scripts": {
     "build": "tsc",
-    "prepare": "tsc",
     "typecheck": "tsc --noEmit && tsc -p fixtures",
+    "verify": "pnpm build && git diff --quiet -- cli/dist || (echo 'cli/dist is out of date: run pnpm build and commit it' && exit 1)",
     "fixture": "node fixtures/build.ts"
   },
   "engines": {
     "node": ">=20"
   },
+  "packageManager": "pnpm@12.11.2",
   "dependencies": {
     "@vercel/blob": "2.8.2",
     "typescript": "5.6.3"

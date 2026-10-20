@@ -6,7 +6,7 @@ changed functions call each other. How it works: https://glance.nishilfaldu.site
 ## Use
 
 ```sh
-npm install -g github:nishilfaldu/glance
+pnpm add -g github:nishilfaldu/glance
 
 glance                # open the review page for this branch on localhost
 glance --working      # include uncommitted changes
@@ -25,11 +25,16 @@ in `~/.config/glance/config.json`:
 ## Develop
 
 ```sh
-npm install && npm link   # builds cli/ to cli/dist and puts glance on your PATH
-npm run build             # after editing cli/
-npm run typecheck
-npm run fixture ledger    # build fixtures/ledger into examples/ledger, then run glance there
+pnpm install
+pnpm link --global        # puts this checkout's glance on your PATH
+pnpm build                # after editing cli/; commit cli/dist with it
+pnpm typecheck
+pnpm verify               # fails if cli/dist doesn't match cli/
+pnpm fixture ledger       # build fixtures/ledger into examples/ledger, then run glance there
 ```
+
+`cli/dist` is committed so installing from GitHub needs no build step: pnpm
+won't run build scripts of packages installed from git.
 
 The site in `public/` is static and deploys from `main` to Vercel: `index.html`
 is the docs, `viewer.html` renders `/r/sample` and published `/r#<store>/<id>`

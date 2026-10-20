@@ -4,4 +4,3 @@ node_modules/
 .DS_Store
 # Sample repo used for testing; it is its own git repo
 examples/
-cli/dist/
