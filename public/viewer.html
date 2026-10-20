@@ -66,7 +66,7 @@
     color: var(--fg); white-space: nowrap; }
   .file.same { background: none; color: var(--faint); }
   /* Color is for what changed: unchanged files and folders get gray icons */
-  .file.same .ico, .quiet > .dir .ico, .folded .ico { filter: grayscale(1); opacity: .45; }
+  .file.same .ico, .quiet > .dir .ico { filter: grayscale(1); opacity: .45; }
   .file.skip { background: none; border-style: dashed; border-color: var(--line); color: var(--faint); cursor: pointer; }
   .fn { display: inline-flex; align-items: center; gap: 5px; font: 11.5px var(--mono); padding: 2px 8px;
     border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--fg);
@@ -100,10 +100,7 @@
   .fbox .fhead { display: inline-flex; align-items: center; gap: 5px; font: 12.5px var(--mono); }
   .fbox .fns { display: flex; flex-wrap: wrap; gap: 3px; padding-left: 21px; }
   .file.solo { cursor: pointer; }
-  .folded { display: inline-flex; align-items: center; gap: 5px; font: 12.5px var(--mono); color: var(--faint);
-    padding: 3px 8px; border: 1px dashed var(--line); border-radius: 8px; white-space: nowrap; }
-  .folded .count, .more { font: 11.5px var(--mono); color: var(--faint); }
-  .more { padding: 3px 4px; align-self: center; }
+  .more { font: 11.5px var(--mono); color: var(--faint); padding: 3px 4px; align-self: center; }
 
   /* Graph */
   .graph-scroll { overflow-x: auto; }
@@ -202,8 +199,7 @@
 </div>
 
 <script>
-  // The brief's shape is typed in cli/src/brief.ts. Briefs published before the current shape may also hold
-  // { collapsed: true, count } folders, "spot" numbers and a "not connected" flag; the code below copes with all three.
+  // The brief's shape is typed in cli/src/brief.ts.
   // Theme: system (no attribute on <html>), light or dark; an explicit pick is remembered in this browser
   (function () {
     var buttons = document.querySelectorAll("#themes button");
@@ -276,15 +272,14 @@
     function dirLabel(name, color) {
       return '<span class="dir">' + icon("dir", color) + esc(name) + "/</span>";
     }
-    // One number per rule, in the order the map reads, so ② means the same thing everywhere.
-    // Briefs from before "not connected" was dropped still carry it; it gets no number.
+    // One number per rule, in the order the map reads, so 2 means the same rule everywhere.
     var ruleNo = {}, rules = [];
     function eachEntry(dir, visit, top) {
       function files() { (dir.files || []).forEach(function (f) { [f].concat(f.fns || []).forEach(function (x) { visit(x, f); }); }); }
-      function dirs() { (dir.dirs || []).forEach(function (sub) { if (!sub.collapsed) eachEntry(sub, visit, false); }); }
+      function dirs() { (dir.dirs || []).forEach(function (sub) { eachEntry(sub, visit, false); }); }
       if (top) { dirs(); files(); } else { files(); dirs(); }
     }
-    function ruleFlags(x) { return (x.flags || []).filter(function (f) { return f !== "not connected to the main change"; }); }
+    function ruleFlags(x) { return x.flags || []; }
     eachEntry(data.root, function (x) {
       ruleFlags(x).forEach(function (f) { if (!ruleNo[f]) rules.push(f), ruleNo[f] = rules.length; });
     }, true);
@@ -304,7 +299,7 @@
       return e;
     }
     function touched(dir) {
-      return !dir.collapsed && ((dir.files || []).some(function (f) { return f.state !== "same"; }) || (dir.dirs || []).some(touched));
+      return (dir.files || []).some(function (f) { return f.state !== "same"; }) || (dir.dirs || []).some(touched);
     }
     function remember(rid, node) { (chips[rid] = chips[rid] || []).push(node); }
     function track(path, node) { (fileEls[path] = fileEls[path] || []).push(node); }
@@ -339,9 +334,6 @@
       }
       return el("span", "file same", fileHead(f));
     }
-    function folded(dir) {
-      return el("span", "folded", icon("dir", dir.color) + esc(dir.name) + '/ <span class="count">' + dir.count + "</span>");
-    }
     // Files on one line, then sub-folders as nested boxes starting on their own line, so siblings share a left edge.
     function fillDir(holder, dir, prefix) {
       var fileLine = el("div", "line"), dirLine = el("div", "line");
@@ -350,7 +342,6 @@
       if (fileLine.firstChild) holder.appendChild(fileLine);
       if ((dir.dirs || []).length) holder.appendChild(dirLine);
       (dir.dirs || []).forEach(function (sub) {
-        if (sub.collapsed) return dirLine.appendChild(folded(sub));
         var box = el("div", touched(sub) ? "group" : "group quiet", dirLabel(sub.name, sub.color));
         var inner = el("div", "files");
         box.appendChild(inner);
@@ -370,10 +361,7 @@
       map.appendChild(row);
     }
     (root.dirs || []).forEach(function (top) {
-      mapRow(dirLabel(top.name, top.color), function (holder) {
-        if (top.collapsed) holder.appendChild(el("span", "more", top.count + " files"));
-        else fillDir(holder, top, top.name);
-      }, !touched(top));
+      mapRow(dirLabel(top.name, top.color), function (holder) { fillDir(holder, top, top.name); }, !touched(top));
     });
     if ((root.files || []).length) {
       mapRow('<span class="dir">root</span>', function (holder) { fillDir(holder, { files: root.files }, ""); });
@@ -389,7 +377,6 @@
         fileKids.push({ file: f, path: path, kids: (f.fns || []).map(function (fn) { return { fn: fn, path: path, id: path + "#" + fn.name }; }) });
       });
       (dir.dirs || []).forEach(function (sub) {
-        if (sub.collapsed) return;
         var child = affected(sub, join(prefix, sub.name), depth + 1);
         if (child.kids.length) dirKids.push(child);
       });
