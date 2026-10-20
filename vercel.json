@@ -4,8 +4,10 @@
   "outputDirectory": "public",
   "rewrites": [
     { "source": "/r", "destination": "/viewer.html" },
-    { "source": "/r/:id", "destination": "/viewer.html" },
-    { "source": "/demo", "destination": "/demo.html" }
+    { "source": "/r/:id", "destination": "/viewer.html" }
+  ],
+  "redirects": [
+    { "source": "/demo", "destination": "/r/sample", "permanent": false }
   ],
   "headers": [
     {
@@ -15,7 +17,7 @@
       ]
     },
     {
-      "source": "/(r|viewer\\.html|sample\\.json|demo)(.*)",
+      "source": "/(r|viewer\\.html|sample\\.json)(.*)",
       "headers": [
         { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
       ]

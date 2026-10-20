@@ -14,12 +14,12 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap">
 <style>
   /* Soft palette: near-black text, hairline borders, color only where it means something.
-     blue = the main change, amber = flags, teal = not connected, green = status. The two dark blocks must stay identical. */
+     blue = calls, amber = flags, green = status. The two dark blocks must stay identical. */
   :root {
     --bg: #ffffff; --surface: #ffffff; --fg: #1f1f1f; --muted: #6b6b6b; --faint: #a6a6a6;
     --line: #ececec; --soft: #f4f4f3; --well: #fafafa; --band: #f6f6f5;
     --blue: #2f6fe4; --blue-bg: #edf3ff; --amber: #c47a0e; --amber-dot: #efb02f; --amber-bg: #fff5e3;
-    --teal: #138f80; --teal-dot: #4cc5b4; --teal-bg: #e8f7f4; --green: #2e9b55; --red: #cf4a3f;
+    --green: #2e9b55; --red: #cf4a3f;
     --add-bg: #eef8f1; --del-bg: #fdf0ee; --unit: #8b5cc4;
     --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
@@ -29,13 +29,13 @@
     --bg: #161616; --surface: #1b1b1b; --fg: #ececec; --muted: #a3a3a3; --faint: #6c6c6c;
     --line: #2a2a2a; --soft: #252525; --well: #1f1f1f; --band: #222222;
     --blue: #7ea8ff; --blue-bg: #1a2742; --amber: #f2b441; --amber-dot: #efb02f; --amber-bg: #2f2512;
-    --teal: #5fd6c5; --teal-dot: #4cc5b4; --teal-bg: #11302c; --green: #5fd28f; --red: #ff7b70;
+    --green: #5fd28f; --red: #ff7b70;
     --add-bg: #13261a; --del-bg: #2c1614; --unit: #c3a0ef; color-scheme: dark } }
   :root[data-theme="dark"] {
     --bg: #161616; --surface: #1b1b1b; --fg: #ececec; --muted: #a3a3a3; --faint: #6c6c6c;
     --line: #2a2a2a; --soft: #252525; --well: #1f1f1f; --band: #222222;
     --blue: #7ea8ff; --blue-bg: #1a2742; --amber: #f2b441; --amber-dot: #efb02f; --amber-bg: #2f2512;
-    --teal: #5fd6c5; --teal-dot: #4cc5b4; --teal-bg: #11302c; --green: #5fd28f; --red: #ff7b70;
+    --green: #5fd28f; --red: #ff7b70;
     --add-bg: #13261a; --del-bg: #2c1614; --unit: #c3a0ef; color-scheme: dark }
 
   * { box-sizing: border-box; }
@@ -88,7 +88,6 @@
   .status { display: inline-flex; align-items: center; gap: 7px; font-size: 14.5px; color: var(--green); white-space: nowrap; }
   .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
   .status.amber { color: var(--amber); } .status.amber::before { display: none; }
-  .status.teal { color: var(--teal); } .status.teal::before { display: none; }
 
   /* Command bar: the install line, with a round copy button */
   .cmd { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 20px; padding: 8px 8px 8px 18px; background: var(--surface); margin: 0 0 12px; }
@@ -135,18 +134,16 @@
   .r .me { grid-column: 3; font: 12.5px var(--mono); color: var(--faint); white-space: nowrap; text-align: right; }
   .r.dim .ti { color: var(--muted); }
   .r.amber .ti > span:first-child { color: var(--amber); }
-  .c-blue { --c: var(--blue); } .c-amber { --c: var(--amber-dot); } .c-teal { --c: var(--teal-dot); } .c-grey { --c: var(--faint); } .c-green { --c: var(--green); }
+  .c-blue { --c: var(--blue); } .c-amber { --c: var(--amber-dot); } .c-grey { --c: var(--faint); } .c-green { --c: var(--green); }
   @media (max-width: 520px) { .r .me { display: none; } .r { grid-template-columns: var(--railw, 34px) minmax(0, 1fr); } }
 
   /* Chips and badges */
   .chip { font: 13px var(--mono); padding: 1px 8px; border-radius: 7px; white-space: nowrap; line-height: 1.6; }
   .chip.blue { color: var(--blue); background: var(--blue-bg); }
-  .chip.teal { color: var(--teal); background: var(--teal-bg); }
   .chip.grey { color: var(--muted); background: var(--soft); }
   .chip.dash { color: var(--faint); border: 1px dashed var(--line); background: none; }
   .num { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; font: 500 12px var(--sans);
     color: var(--amber); background: var(--amber-bg); border: 1px solid color-mix(in srgb, var(--amber-dot) 45%, transparent); flex: none; }
-  .num.teal { color: var(--teal); background: var(--teal-bg); border-color: color-mix(in srgb, var(--teal-dot) 45%, transparent); }
   .new { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex: none; }
 
   /* Code */
@@ -167,15 +164,6 @@
   .term { font: 13px/1.85 var(--mono); background: var(--well); border: 1px solid var(--line); border-radius: 14px; padding: 14px 18px; overflow-x: auto; white-space: pre; color: var(--fg); }
   .term .p, .term .o { color: var(--faint); }
   .term .u { color: var(--blue); }
-
-  /* Arrows between chips, for the unchanged-helper chain */
-  .net { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 40px; }
-  .net > svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-  .edges path { fill: none; stroke: var(--faint); stroke-width: 1.5; }
-  .edges path.soft { stroke-dasharray: 3 4; }
-  .edges marker path { fill: var(--faint); stroke: none; }
-  .fn { font: 13px var(--mono); padding: 4px 10px; border-radius: 9px; background: var(--soft); color: var(--fg); white-space: nowrap; position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 7px; }
-  .fn.ghost { background: none; border: 1px dashed var(--line); color: var(--faint); }
 
   /* Reference */
   table { width: 100%; border-collapse: collapse; margin: 4px 0 0; font-size: 15px; }
@@ -208,20 +196,20 @@
           <button type="button" data-theme="light" aria-label="Light theme" title="Light"><svg><use href="#i-light"/></svg></button>
           <button type="button" data-theme="dark" aria-label="Dark theme" title="Dark"><svg><use href="#i-dark"/></svg></button>
         </div>
-        <a class="pill sm" href="/demo">Example</a>
+        <a class="pill sm" href="/r/sample">Example</a>
       </div>
     </div>
 
     <section class="step first" id="top" data-pv="map">
       <h1>See a pull request before you read it.</h1>
-      <p class="lede">Glance maps a branch: where the changes sit, and how the changed functions call each other. The edit that doesn't belong stands out on its own.</p>
+      <p class="lede">Glance maps a branch: where the changes sit, how the changed functions call each other, and which lines match a risky pattern.</p>
       <div class="cmd">
         <pre><span class="p">$ </span>git clone https://github.com/nishilfaldu/glance
 <span class="p">$ </span>cd glance/cli &amp;&amp; npm install &amp;&amp; npm link</pre>
         <button class="copy" type="button" data-copy="git clone https://github.com/nishilfaldu/glance&#10;cd glance/cli &amp;&amp; npm install &amp;&amp; npm link" aria-label="Copy install commands"><svg><use href="#i-copy"/></svg></button>
       </div>
       <div class="cta">
-        <a class="pill" href="/demo">Open the example</a>
+        <a class="pill" href="/r/sample">Open the example</a>
         <a class="pill line" href="#how">How it works</a>
       </div>
     </section>
@@ -231,7 +219,7 @@
       <p>The whole repo on one screen. Changed files open up to show the functions the branch touched. Click one to mark it reviewed.</p>
       <figure class="pv tall" id="pv-map">
         <div class="pv-head"><span class="t">Rotate sessions across checkout <span>#42</span></span><span class="status">Live</span></div>
-        <div class="pv-body frame"><iframe data-src="/demo?embed&amp;tab=map" title="Repo map of the example pull request" loading="lazy"></iframe></div>
+        <div class="pv-body frame"><iframe data-src="/r/sample?embed&amp;tab=map" title="Repo map of the example pull request" loading="lazy"></iframe></div>
       </figure>
     </section>
 
@@ -240,7 +228,7 @@
       <p>Only the paths that lead to a change. Lines are folders, arrows are calls. Hover a function to trace it.</p>
       <figure class="pv tall" id="pv-calls">
         <div class="pv-head"><span class="t">Rotate sessions across checkout <span>#42</span></span><span class="status">Live</span></div>
-        <div class="pv-body frame"><iframe data-src="/demo?embed&amp;tab=calls" title="Call graph of the example pull request" loading="lazy"></iframe></div>
+        <div class="pv-body frame"><iframe data-src="/r/sample?embed&amp;tab=calls" title="Call graph of the example pull request" loading="lazy"></iframe></div>
       </figure>
     </section>
 
@@ -270,8 +258,7 @@
             <div class="r c-grey"><span class="ti"><span>Drop lockfiles and generated code</span></span><span class="me">skip rules</span></div>
             <div class="r c-blue"><span class="ti"><span>Map each line to its function</span></span><span class="me">TypeScript</span></div>
             <div class="r c-blue"><span class="ti"><span>Follow calls through imports</span></span><span class="me">imports</span></div>
-            <div class="r c-blue"><span class="ti"><span>Find the main change</span></span><span class="me">largest group</span></div>
-            <div class="r c-amber"><span class="ti"><span>Number what the rules find</span></span><span class="me">flags</span></div>
+            <div class="r c-amber"><span class="ti"><span>Number each rule that matches</span></span><span class="me">flags</span></div>
             <div class="r c-green here"><span class="ti"><span>Write the brief</span><span class="chip grey">brief.json</span></span><span class="me">no source code</span></div>
           </div>
         </div>
@@ -321,7 +308,7 @@
 
     <section class="step" id="calls" data-pv="resolve">
       <h2>Calls connect them</h2>
-      <p>Each call is followed through the file's imports to the function it lands on. A chain through an unchanged helper still connects.</p>
+      <p>Each call is followed through the file's imports to the function it lands on. When both ends changed, the call graph draws an arrow.</p>
       <figure class="pv" id="pv-resolve">
         <div class="pv-head"><span class="t">checkout.ts <span>src/api</span></span></div>
         <div class="pv-body">
@@ -338,32 +325,6 @@
               <div class="r c-blue"><span class="ti"><span>src/auth/session.ts</span></span><span class="me">found</span></div>
               <div class="r c-blue here"><span class="ti"><span>rotateSession()</span><span class="new"></span></span><span class="me">touched</span></div>
             </div>
-            <div class="net" data-edges="x>h h>y">
-              <span class="fn" data-n="x">A()</span>
-              <span class="fn ghost" data-n="h">helper()</span>
-              <span class="fn" data-n="y">B()</span>
-            </div>
-          </div>
-        </div>
-      </figure>
-    </section>
-
-    <section class="step" id="main-change" data-pv="groups">
-      <h2>The main change</h2>
-      <p>The largest group of connected functions is the main change. Anything outside it gets a teal number. Tests don't count, since they call everything.</p>
-      <figure class="pv" id="pv-groups">
-        <div class="pv-head"><span class="t">Rotate sessions across checkout <span>#42</span></span><span class="status teal">2 not connected</span></div>
-        <div class="pv-body">
-          <div class="rows" data-links="route>refresh refresh>rotate checkout>rotate rotate>create create>sign" style="--railw: 54px">
-            <div class="r c-blue" data-n="route" data-lane="0"><span class="ti"><span>POST /session/refresh</span><span class="new"></span></span><span class="me">routes.ts</span></div>
-            <div class="r c-amber amber" data-n="refresh" data-lane="0"><span class="ti"><span>refreshIfExpiring()</span><span class="new"></span><span class="num">1</span></span><span class="me">refresh.ts</span></div>
-            <div class="r c-blue" data-n="checkout" data-lane="1"><span class="ti"><span>handleCheckout()</span></span><span class="me">checkout.ts</span></div>
-            <div class="r c-blue here" data-n="rotate" data-lane="0"><span class="ti"><span>rotateSession()</span><span class="new"></span><span class="chip blue">main change</span></span><span class="me">session.ts</span></div>
-            <div class="r c-blue" data-n="create" data-lane="0"><span class="ti"><span>createSession()</span></span><span class="me">session.ts</span></div>
-            <div class="r c-blue" data-n="sign" data-lane="0"><span class="ti"><span>signToken()</span><span class="new"></span></span><span class="me">session.ts</span></div>
-            <div class="r c-teal" data-lane="2"><span class="ti"><span>formatRelative()</span><span class="num teal">3</span></span><span class="me">date.ts</span></div>
-            <div class="r c-teal" data-lane="2"><span class="ti"><span>apiFetch()</span><span class="num teal">4</span></span><span class="me">sessionClient.ts</span></div>
-            <div class="r c-grey dim" data-lane="0"><span class="ti"><span>5 test cases</span></span><span class="me">not counted</span></div>
           </div>
         </div>
       </figure>
@@ -371,16 +332,15 @@
 
     <section class="step" id="flags" data-pv="rules">
       <h2>Flags</h2>
-      <p>Rules only read lines the branch added. A flag says what was found, not that it's wrong.</p>
+      <p>Rules only read lines the branch added. Each rule keeps one number across the page; click a numbered chip and the bar at the bottom names its rule. A flag says what was found, not that it's wrong.</p>
       <figure class="pv" id="pv-rules">
-        <div class="pv-head"><span class="t">Rules</span><span class="status amber">5 flagged</span></div>
+        <div class="pv-head"><span class="t">Rules</span><span class="status amber">4 rules</span></div>
         <div class="pv-body center">
           <div class="rows" style="--railw: 30px">
             <div class="r c-amber"><span class="ti"><span>Error swallowed</span><span class="num">1</span></span><span class="me">catch { return null }</span></div>
             <div class="r c-amber"><span class="ti"><span>Env var with a fallback</span><span class="num">2</span></span><span class="me">?? "dev-secret"</span></div>
-            <div class="r c-amber"><span class="ti"><span>Type check bypassed</span><span class="num">5</span></span><span class="me">as any · @ts-ignore</span></div>
-            <div class="r c-amber"><span class="ti"><span>Assertion removed</span><span class="num">5</span></span><span class="me">− expect(…)</span></div>
-            <div class="r c-teal"><span class="ti"><span>Not connected</span><span class="num teal">3</span></span><span class="me">no call path</span></div>
+            <div class="r c-amber"><span class="ti"><span>Type check bypassed</span><span class="num">3</span></span><span class="me">as any · @ts-ignore</span></div>
+            <div class="r c-amber"><span class="ti"><span>Assertion removed</span><span class="num">4</span></span><span class="me">− expect(…)</span></div>
             <div class="r c-grey dim"><span class="ti"><span>Skipped</span><span class="chip dash">package-lock.json</span></span><span class="me">.glance.yml</span></div>
           </div>
         </div>
@@ -389,17 +349,18 @@
 
     <section class="step" id="share" data-pv="publish">
       <h2>Share it</h2>
-      <p><code>glance publish --pr</code> puts a secret link in the PR description. Publishing again updates the same link. Only names and calls are uploaded, never code.</p>
+      <p>Nothing leaves your machine until you publish. <code>glance publish --pr</code> uploads the brief to your own Vercel Blob store and puts the link in the PR description. The store and id sit after the <code>#</code>, so this site never sees them. Publishing again updates the same link. Only names and calls are uploaded, never code.</p>
       <figure class="pv" id="pv-publish">
         <div class="pv-head"><span class="t">Rotate sessions across checkout <span>#42</span></span><span class="status">Open</span></div>
         <div class="pv-body">
           <div class="stack">
-            <div class="term"><span class="p">$ </span>glance publish --pr
+            <div class="term"><span class="p">$ </span>export BLOB_READ_WRITE_TOKEN=vercel_blob_rw_…
+<span class="p">$ </span>glance publish --pr
 <span class="o">feature/session-rotation → main: 11 files, 14 functions, 5 flagged</span>
-<span class="u">https://glance.nishilfaldu.site/r/9xQ2mV7cLk0aTf3RzH1bWg</span></div>
+<span class="u">https://glance.nishilfaldu.site/r#k3x9d2/9xQ2mV7cLk0aTf3RzH1bWg</span></div>
             <div class="rows" style="--railw: 30px">
               <div class="r c-grey dim"><span class="ti"><span>Adds refresh tokens and rotates the session on checkout.</span></span></div>
-              <div class="r c-blue here"><span class="ti"><span>Review map</span><span class="chip blue">glance.nishilfaldu.site/r/9xQ2…</span></span><span class="me">you · now</span></div>
+              <div class="r c-blue here"><span class="ti"><span>Review map</span><span class="chip blue">glance.nishilfaldu.site/r#k3x9…</span></span><span class="me">you · now</span></div>
             </div>
           </div>
         </div>
@@ -411,7 +372,7 @@
       <h2>Reference</h2>
       <table>
         <tr><td><code>glance</code></td><td>Open the map on localhost</td></tr>
-        <tr><td><code>glance publish</code></td><td>Upload it and print a secret link</td></tr>
+        <tr><td><code>glance publish</code></td><td>Upload it to your Vercel Blob store and print a link</td></tr>
         <tr><td><code>glance json</code></td><td>Print the brief as JSON</td></tr>
         <tr><td><code>--base &lt;ref&gt;</code></td><td>Compare against this branch</td></tr>
         <tr><td><code>--working</code></td><td>Include uncommitted changes</td></tr>
@@ -422,7 +383,7 @@
         <div class="pv-body">
           <div class="term" style="border:0;background:none;padding:0"><span class="o">Usage</span>
   glance [options]           <span class="o">Open the review page for this branch</span>
-  glance publish [options]   <span class="o">Upload it and print a secret link</span>
+  glance publish [options]   <span class="o">Upload it to your Blob store and print a link</span>
   glance json [options]      <span class="o">Print the brief as JSON</span>
 
 <span class="o">Options</span>
@@ -438,20 +399,20 @@
   skip:
     - generated/**
 
-<span class="o">Publishing reads GLANCE_URL and GLANCE_PUBLISH_KEY,</span>
-<span class="o">or ~/.config/glance/config.json</span></div>
+<span class="o">Publishing needs BLOB_READ_WRITE_TOKEN (a public Blob store you own),</span>
+<span class="o">or "blobToken" in ~/.config/glance/config.json</span></div>
         </div>
       </figure>
     </section>
 
     <section class="step" id="limits" data-pv="help">
       <h2>Limits</h2>
-      <p>Functions are found in TypeScript and JavaScript only. Calls on objects (<code>db.insert()</code>) and path aliases (<code>@/lib</code>) aren't followed yet.</p>
+      <p>Functions are found in TypeScript and JavaScript only. Calls on objects (<code>db.insert()</code>), class methods, functions passed as callbacks, path aliases (<code>@/lib</code>) and imports between packages in a monorepo aren't followed yet. Deleted files don't show up yet.</p>
     </section>
 
     <footer>
       <span>Glance by <a href="https://nishilfaldu.site">Nishil Faldu</a></span>
-      <a href="/demo">Example</a>
+      <a href="/r/sample">Example</a>
     </footer>
   </main>
 
@@ -499,7 +460,7 @@
     });
   });
 
-  var NS = "http://www.w3.org/2000/svg", marker = 0;
+  var NS = "http://www.w3.org/2000/svg";
 
   // Rails: each row gets a dot on its lane. data-links="a>b" joins rows by data-n; without it, consecutive rows join.
   function drawRail(rows) {
@@ -545,40 +506,8 @@
     rows.insertBefore(svg, rows.firstChild);
   }
 
-  // Arrows between chips: data-edges="a>b" links [data-n=a] to [data-n=b], sideways or downwards.
-  function drawEdges(net) {
-    var old = net.querySelector(":scope > svg.edges");
-    if (old) old.remove();
-    var box = net.getBoundingClientRect();
-    if (!box.width) return;
-    var id = "ah" + ++marker;
-    var svg = document.createElementNS(NS, "svg");
-    svg.setAttribute("class", "edges");
-    svg.innerHTML = '<defs><marker id="' + id + '" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L8,4 L0,8 z"/></marker></defs>';
-    net.dataset.edges.split(" ").forEach(function (pair) {
-      var ends = pair.split(">");
-      var a = net.querySelector('[data-n="' + ends[0] + '"]'), b = net.querySelector('[data-n="' + ends[1] + '"]');
-      if (!a || !b) return;
-      var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(), d;
-      var ax = ra.left - box.left, ay = ra.top - box.top, bx = rb.left - box.left, by = rb.top - box.top;
-      if (rb.left >= ra.right + 8) {
-        var x1 = ax + ra.width + 4, y1 = ay + ra.height / 2, x2 = bx - 5, y2 = by + rb.height / 2, m = (x1 + x2) / 2;
-        d = "M" + x1 + " " + y1 + " C" + m + " " + y1 + " " + m + " " + y2 + " " + x2 + " " + y2;
-      } else {
-        var sx = ax + ra.width / 2, sy = ay + ra.height + 4, tx = bx + rb.width / 2, ty = by - 5, my = (sy + ty) / 2;
-        d = "M" + sx + " " + sy + " C" + sx + " " + my + " " + tx + " " + my + " " + tx + " " + ty;
-      }
-      var p = document.createElementNS(NS, "path");
-      p.setAttribute("d", d);
-      p.setAttribute("marker-end", "url(#" + id + ")");
-      if (a.classList.contains("ghost") || b.classList.contains("ghost")) p.setAttribute("class", "soft");
-      svg.appendChild(p);
-    });
-    net.insertBefore(svg, net.firstChild);
-  }
   function drawAll() {
     document.querySelectorAll(".rows").forEach(drawRail);
-    document.querySelectorAll(".net[data-edges]").forEach(drawEdges);
   }
 
   // Cards: inline under their section on narrow screens; on wide ones they move into the sticky pane
