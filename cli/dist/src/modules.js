@@ -54,22 +54,29 @@ export class Modules {
         return this.alias(dir, source) ?? this.workspace(source);
     }
     // The function `file` exports as `name` ("default" for the default export), following re-exports.
-    exported(file, name, seen = new Set()) {
+    exported(file, name) {
+        return this.lookup(file, name, (parsed, n) => parsed.units.find((u) => (n === "default" ? u.isDefault : u.local === n)));
+    }
+    // The class `file` exports as `name`, following re-exports.
+    exportedClass(file, name) {
+        return this.lookup(file, name, (parsed, n) => (n === "default" ? [...parsed.classes.values()].find((c) => c.isDefault) : parsed.classes.get(n)));
+    }
+    lookup(file, name, own, seen = new Set()) {
         if (seen.has(file))
             return null;
         seen.add(file);
         const parsed = this.parsed(file);
         if (!parsed)
             return null;
-        const own = parsed.units.find((u) => (name === "default" ? u.isDefault : u.local === name));
-        if (own)
-            return own;
+        const found = own(parsed, name);
+        if (found)
+            return found;
         for (const re of parsed.reexports) {
             const inner = re.names === "*" ? (name === "default" ? undefined : name) : re.names.get(name);
             const next = inner && this.resolve(file, re.source);
-            const found = inner && next ? this.exported(next, inner, seen) : null;
-            if (found)
-                return found;
+            const deeper = inner && next ? this.lookup(next, inner, own, seen) : null;
+            if (deeper)
+                return deeper;
         }
         return null;
     }

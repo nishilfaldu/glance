@@ -3,7 +3,7 @@
 // package. Exports are followed through re-exports, parsing files that didn't change only when an import passes through.
 import { posix } from "node:path";
 import ts from "typescript";
-import { CODE_FILE, type ParsedCode, packageName, readCode, type Unit } from "./code.js";
+import { CODE_FILE, type ClassInfo, type ParsedCode, packageName, readCode, type Unit } from "./code.js";
 
 const EXTENSIONS = ["ts", "tsx", "mts", "js", "jsx", "mjs", "cjs"];
 
@@ -76,18 +76,27 @@ export class Modules {
   }
 
   // The function `file` exports as `name` ("default" for the default export), following re-exports.
-  exported(file: string, name: string, seen = new Set<string>()): Unit | null {
+  exported(file: string, name: string): Unit | null {
+    return this.lookup(file, name, (parsed, n) => parsed.units.find((u) => (n === "default" ? u.isDefault : u.local === n)));
+  }
+
+  // The class `file` exports as `name`, following re-exports.
+  exportedClass(file: string, name: string): ClassInfo | null {
+    return this.lookup(file, name, (parsed, n) => (n === "default" ? [...parsed.classes.values()].find((c) => c.isDefault) : parsed.classes.get(n)));
+  }
+
+  private lookup<T>(file: string, name: string, own: (parsed: ParsedCode, name: string) => T | undefined, seen = new Set<string>()): T | null {
     if (seen.has(file)) return null;
     seen.add(file);
     const parsed = this.parsed(file);
     if (!parsed) return null;
-    const own = parsed.units.find((u) => (name === "default" ? u.isDefault : u.local === name));
-    if (own) return own;
+    const found = own(parsed, name);
+    if (found) return found;
     for (const re of parsed.reexports) {
       const inner = re.names === "*" ? (name === "default" ? undefined : name) : re.names.get(name);
       const next = inner && this.resolve(file, re.source);
-      const found = inner && next ? this.exported(next, inner, seen) : null;
-      if (found) return found;
+      const deeper = inner && next ? this.lookup(next, inner, own, seen) : null;
+      if (deeper) return deeper;
     }
     return null;
   }

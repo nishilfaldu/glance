@@ -18,17 +18,20 @@ function isFunctionLike(node) {
 function stringValue(node) {
     return node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) ? node.text : null;
 }
+function isDefaultExport(node) {
+    return (node.modifiers ?? []).some((m) => m.kind === ts.SyntaxKind.DefaultKeyword);
+}
 function unitFor(node) {
     if (ts.isFunctionDeclaration(node) && node.name) {
-        const isDefault = (node.modifiers ?? []).some((m) => m.kind === ts.SyntaxKind.DefaultKeyword);
-        return { name: `${node.name.text}()`, kind: "fn", local: node.name.text, isDefault };
+        return { name: `${node.name.text}()`, kind: "fn", local: node.name.text, isDefault: isDefaultExport(node) };
     }
     if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && isFunctionLike(node.initializer)) {
         return { name: `${node.name.text}()`, kind: "fn", local: node.name.text };
     }
     if (ts.isMethodDeclaration(node) && (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name))) {
-        const owner = ts.isClassLike(node.parent) && node.parent.name ? `${node.parent.name.text}.` : "";
-        return { name: `${owner}${node.name.text}()`, kind: "fn" };
+        const cls = ts.isClassLike(node.parent) ? node.parent.name?.text : undefined;
+        const method = node.name.text;
+        return cls ? { name: `${cls}.${method}()`, kind: "fn", cls, method } : { name: `${method}()`, kind: "fn" };
     }
     if (ts.isPropertyAssignment(node) && isFunctionLike(node.initializer)) {
         const key = stringValue(node.name);
@@ -46,13 +49,24 @@ function unitFor(node) {
     }
     return null;
 }
-// "name", or "ns.name" for `ns.name` (only resolved through `import * as ns`).
+// The `Class` in `new Class(…)`, if that's what the node is (parentheses allowed).
+function newOf(node) {
+    const inner = ts.isParenthesizedExpression(node) ? node.expression : node;
+    return ts.isNewExpression(inner) && ts.isIdentifier(inner.expression) ? inner.expression.text : null;
+}
+// A call target as written: "name", "x.name" or "Class#name". See Unit.calls.
 function targetName(expr) {
     if (ts.isIdentifier(expr))
         return expr.text;
-    if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.expression))
-        return `${expr.expression.text}.${expr.name.text}`;
-    return null;
+    if (!ts.isPropertyAccessExpression(expr))
+        return null;
+    const obj = expr.expression, member = expr.name.text;
+    if (obj.kind === ts.SyntaxKind.ThisKeyword)
+        return `this.${member}`;
+    if (ts.isIdentifier(obj))
+        return `${obj.text}.${member}`;
+    const cls = newOf(obj);
+    return cls ? `${cls}#${member}` : null;
 }
 // What a node calls: the callee of a call, `new` or JSX element, plus functions handed over by name as an
 // argument (`list.map(build)`) or a JSX prop (`onClick={save}`). Names that aren't functions resolve to nothing.
@@ -99,12 +113,23 @@ function readImport(node, imports) {
 export function readCode(path, text) {
     const sf = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, scriptKind(path));
     const lineOf = (pos) => sf.getLineAndCharacterOfPosition(pos).line + 1;
-    const parsed = { units: [], imports: new Map(), reexports: [] };
+    const parsed = { units: [], imports: new Map(), reexports: [], classes: new Map(), instances: new Map() };
     function visit(node, owner) {
+        if (ts.isClassDeclaration(node) && node.name) {
+            parsed.classes.set(node.name.text, { isDefault: isDefaultExport(node), methods: new Map() });
+        }
+        // `const x = new Class(…)`: remember the class, so `x.method()` can be followed
+        if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+            const cls = newOf(node.initializer);
+            if (cls)
+                (owner?.instances ?? parsed.instances).set(node.name.text, cls);
+        }
         const head = unitFor(node);
         if (head) {
-            owner = { ...head, start: lineOf(node.getStart(sf)), end: lineOf(node.getEnd()), calls: new Set() };
+            owner = { ...head, start: lineOf(node.getStart(sf)), end: lineOf(node.getEnd()), calls: new Set(), instances: new Map() };
             parsed.units.push(owner);
+            if (owner.cls && owner.method)
+                parsed.classes.get(owner.cls)?.methods.set(owner.method, owner);
         }
         if (ts.isImportDeclaration(node))
             readImport(node, parsed.imports);

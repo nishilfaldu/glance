@@ -158,12 +158,32 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
         if (r.unit)
             recordByUnit.set(r.unit, r);
     const idOf = (unit) => (unit ? (recordByUnit.get(unit)?.id ?? null) : null);
-    const resolve = (path, parsed, call) => {
-        // "ns.fn" only resolves when ns is an `import * as ns`; other property calls stay unresolved.
+    // A class by the name `path` uses for it: declared there, or imported from a file in the repo. A class from an
+    // outside package stays unresolved: Glance doesn't follow calls into library code.
+    const classNamed = (path, parsed, name) => {
+        const local = parsed.classes.get(name);
+        if (local)
+            return local;
+        const imp = parsed.imports.get(name);
+        const file = imp && imp.imported !== "*" ? modules.resolve(path, imp.source) : null;
+        return imp && file ? modules.exportedClass(file, imp.imported) : null;
+    };
+    const methodOf = (cls, name) => idOf(cls?.methods.get(name));
+    const resolve = (path, parsed, unit, call) => {
+        const hash = call.indexOf("#"); // "Class#method": a method on `new Class(…)`
+        if (hash > 0)
+            return methodOf(classNamed(path, parsed, call.slice(0, hash)), call.slice(hash + 1));
         const [name = "", member] = call.split(".");
         const imp = parsed.imports.get(name);
-        if (member && imp?.imported !== "*")
-            return null;
+        if (member) {
+            if (name === "this")
+                return methodOf(unit.cls ? parsed.classes.get(unit.cls) : null, member);
+            const instanceOf = unit.instances.get(name) ?? parsed.instances.get(name);
+            if (instanceOf)
+                return methodOf(classNamed(path, parsed, instanceOf), member);
+            if (imp?.imported !== "*")
+                return methodOf(classNamed(path, parsed, name), member); // a static method
+        }
         if (!imp)
             return idOf(parsed.units.find((u) => u.local === name));
         const file = modules.resolve(path, imp.source);
@@ -181,7 +201,7 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }) {
             if (!caller)
                 continue;
             for (const call of unit.calls) {
-                const callee = resolve(path, parsed, call);
+                const callee = resolve(path, parsed, unit, call);
                 if (callee && callee !== caller.id)
                     caller.calls.add(callee);
             }

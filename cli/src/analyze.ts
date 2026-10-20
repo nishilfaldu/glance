@@ -2,7 +2,7 @@
 // from the repo's own rules in .glance.yml.
 import { basename } from "node:path";
 import type { Brief, BriefDir, BriefFile, FileIcon, UnitKind } from "./brief.js";
-import { CODE_FILE, type Import, type ParsedCode, packageName, readCode, type Unit, unitAt } from "./code.js";
+import { type ClassInfo, CODE_FILE, type Import, type ParsedCode, packageName, readCode, type Unit, unitAt } from "./code.js";
 import { type FlagRule, readGlanceYml } from "./config.js";
 import * as git from "./git.js";
 import { Modules } from "./modules.js";
@@ -170,11 +170,28 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }:
   const recordByUnit = new Map<Unit, Rec>();
   for (const r of records.values()) if (r.unit) recordByUnit.set(r.unit, r);
   const idOf = (unit: Unit | null | undefined) => (unit ? (recordByUnit.get(unit)?.id ?? null) : null);
-  const resolve = (path: string, parsed: ParsedCode, call: string): string | null => {
-    // "ns.fn" only resolves when ns is an `import * as ns`; other property calls stay unresolved.
+  // A class by the name `path` uses for it: declared there, or imported from a file in the repo. A class from an
+  // outside package stays unresolved: Glance doesn't follow calls into library code.
+  const classNamed = (path: string, parsed: ParsedCode, name: string): ClassInfo | null => {
+    const local = parsed.classes.get(name);
+    if (local) return local;
+    const imp = parsed.imports.get(name);
+    const file = imp && imp.imported !== "*" ? modules.resolve(path, imp.source) : null;
+    return imp && file ? modules.exportedClass(file, imp.imported) : null;
+  };
+  const methodOf = (cls: ClassInfo | null | undefined, name: string) => idOf(cls?.methods.get(name));
+
+  const resolve = (path: string, parsed: ParsedCode, unit: Unit, call: string): string | null => {
+    const hash = call.indexOf("#"); // "Class#method": a method on `new Class(…)`
+    if (hash > 0) return methodOf(classNamed(path, parsed, call.slice(0, hash)), call.slice(hash + 1));
     const [name = "", member] = call.split(".");
     const imp: Import | undefined = parsed.imports.get(name);
-    if (member && imp?.imported !== "*") return null;
+    if (member) {
+      if (name === "this") return methodOf(unit.cls ? parsed.classes.get(unit.cls) : null, member);
+      const instanceOf = unit.instances.get(name) ?? parsed.instances.get(name);
+      if (instanceOf) return methodOf(classNamed(path, parsed, instanceOf), member);
+      if (imp?.imported !== "*") return methodOf(classNamed(path, parsed, name), member); // a static method
+    }
     if (!imp) return idOf(parsed.units.find((u) => u.local === name));
     const file = modules.resolve(path, imp.source);
     if (file) return idOf(modules.exported(file, member ?? imp.imported));
@@ -190,7 +207,7 @@ export function analyze({ cwd, base, head = "HEAD", title, working = false }:
       const caller = recordByUnit.get(unit);
       if (!caller) continue;
       for (const call of unit.calls) {
-        const callee = resolve(path, parsed, call);
+        const callee = resolve(path, parsed, unit, call);
         if (callee && callee !== caller.id) caller.calls.add(callee);
       }
     }
