@@ -78,6 +78,13 @@
   .pill:hover { background: color-mix(in srgb, var(--soft) 70%, var(--line)); }
   .pill.sm { height: 32px; padding: 0 13px; font-size: 14px; }
   .pill.line { background: none; border: 1px solid var(--line); }
+  .top .end { display: flex; align-items: center; gap: 10px; }
+  .themes { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--soft); }
+  .themes button { display: grid; place-items: center; width: 28px; height: 26px; padding: 0; border: 0; border-radius: 999px;
+    background: none; color: var(--faint); cursor: pointer; }
+  .themes button:hover { color: var(--fg); }
+  .themes button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
+  .themes svg { width: 14px; height: 14px; }
   .status { display: inline-flex; align-items: center; gap: 7px; font-size: 14.5px; color: var(--green); white-space: nowrap; }
   .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
   .status.amber { color: var(--amber); } .status.amber::before { display: none; }
@@ -184,6 +191,9 @@
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5" y="5" width="9" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.8A1.8 1.8 0 0 0 9.2 2H3.8A1.8 1.8 0 0 0 2 3.8v5.4A1.8 1.8 0 0 0 3.8 11H5" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+  <symbol id="i-system" viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 14h5M8 11.5V14" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-light" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="i-dark" viewBox="0 0 16 16"><path d="M13.5 9.8A6 6 0 0 1 6.2 2.5a6 6 0 1 0 7.3 7.3z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
   <symbol id="i-check" viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-mark" viewBox="0 0 26 26"><rect width="26" height="26" rx="8" fill="currentColor"/><path d="M9 8v10M9 13c0-3.2 3.2-5 8-5" fill="none" stroke="var(--bg)" stroke-width="1.7"/><circle cx="9" cy="8" r="2.1" fill="var(--bg)"/><circle cx="17" cy="8" r="2.1" fill="#5b8def"/><circle cx="9" cy="18" r="2.1" fill="var(--bg)"/></symbol>
 </svg>
@@ -192,7 +202,14 @@
   <main>
     <div class="top">
       <a class="brand" href="/"><svg><use href="#i-mark"/></svg>Glance</a>
-      <a class="pill sm" href="/demo">Example</a>
+      <div class="end">
+        <div class="themes" id="themes" role="group" aria-label="Theme">
+          <button type="button" data-theme="system" aria-label="System theme" title="System"><svg><use href="#i-system"/></svg></button>
+          <button type="button" data-theme="light" aria-label="Light theme" title="Light"><svg><use href="#i-light"/></svg></button>
+          <button type="button" data-theme="dark" aria-label="Dark theme" title="Dark"><svg><use href="#i-dark"/></svg></button>
+        </div>
+        <a class="pill sm" href="/demo">Example</a>
+      </div>
     </div>
 
     <section class="step first" id="top" data-pv="map">
@@ -443,6 +460,32 @@
 
 <script>
   var frames = [].slice.call(document.querySelectorAll(".pv iframe"));
+
+  // Theme: system (no attribute on <html>), light or dark. Same key as the viewer, so a pick carries over to review pages,
+  // and it's applied to the embedded demos too.
+  (function () {
+    var buttons = document.querySelectorAll("#themes button");
+    function setOn(doc, t) {
+      if (!doc || !doc.documentElement) return;
+      if (t) doc.documentElement.dataset.theme = t;
+      else delete doc.documentElement.dataset.theme;
+    }
+    function apply(t) {
+      setOn(document, t);
+      frames.forEach(function (f) { try { setOn(f.contentDocument, t); } catch (e) {} });
+      buttons.forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.theme === (t || "system"))); });
+    }
+    apply(document.documentElement.dataset.theme);
+    buttons.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var t = b.dataset.theme === "system" ? null : b.dataset.theme;
+        apply(t);
+        try { if (t) localStorage.setItem("glance-theme", t); else localStorage.removeItem("glance-theme"); } catch (e) {}
+      });
+    });
+    // A demo that finishes loading after a pick reads the saved value itself; this covers storage being blocked.
+    frames.forEach(function (f) { f.addEventListener("load", function () { try { setOn(f.contentDocument, document.documentElement.dataset.theme); } catch (e) {} }); });
+  })();
 
   document.querySelectorAll("[data-copy]").forEach(function (b) {
     b.addEventListener("click", function () {
