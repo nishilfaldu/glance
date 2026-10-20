@@ -87,6 +87,15 @@
 
   /* Minimap */
   .map { display: grid; gap: 10px; }
+  .maptools { display: flex; justify-content: flex-end; margin: -6px 0 -10px; }
+  .seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--chip); }
+  .seg button { font: 500 12.5px var(--sans); color: var(--muted); background: none; border: 0; border-radius: 999px;
+    padding: 4px 12px; cursor: pointer; white-space: nowrap; }
+  .seg button:hover { color: var(--fg); }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
+  .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  /* Changed only: just the changed (and skipped) files and the folders that lead to them */
+  .map.changed .row.quiet, .map.changed .group.quiet, .map.changed .line.quiet, .map.changed .file.same, .map.changed .more { display: none; }
   .row { display: grid; grid-template-columns: 104px 1fr; gap: 10px; align-items: start; }
   .groups { display: flex; flex-direction: column; gap: 6px; min-width: 0; align-items: flex-start; }
   .line { display: flex; flex-wrap: wrap; gap: inherit; align-items: flex-start; min-width: 0; max-width: 100%; }
@@ -187,6 +196,12 @@
     <div class="legend" id="legend" aria-label="Legend" hidden></div>
 
     <section class="panel" role="tabpanel" id="panel-map" aria-labelledby="tab-map">
+      <div class="maptools">
+        <div class="seg" id="mapview" role="group" aria-label="Show">
+          <button type="button" data-view="all" aria-pressed="true">Whole repo</button>
+          <button type="button" data-view="changed" aria-pressed="false">Changed only</button>
+        </div>
+      </div>
       <div class="map" id="map"></div>
     </section>
 
@@ -336,7 +351,9 @@
     }
     // Files on one line, then sub-folders as nested boxes starting on their own line, so siblings share a left edge.
     function fillDir(holder, dir, prefix) {
-      var fileLine = el("div", "line"), dirLine = el("div", "line");
+      var files = dir.files || [], dirs = dir.dirs || [];
+      var fileLine = el("div", files.every(function (f) { return f.state === "same"; }) ? "line quiet" : "line");
+      var dirLine = el("div", dirs.some(touched) ? "line" : "line quiet");
       (dir.files || []).forEach(function (f) { fileLine.appendChild(fileNode(f, join(prefix, f.name))); });
       if (dir.more) fileLine.appendChild(el("span", "more", "+" + dir.more + " more"));
       if (fileLine.firstChild) holder.appendChild(fileLine);
@@ -364,8 +381,25 @@
       mapRow(dirLabel(top.name, top.color), function (holder) { fillDir(holder, top, top.name); }, !touched(top));
     });
     if ((root.files || []).length) {
-      mapRow('<span class="dir">root</span>', function (holder) { fillDir(holder, { files: root.files }, ""); });
+      mapRow('<span class="dir">root</span>', function (holder) { fillDir(holder, { files: root.files }, ""); }, !touched({ files: root.files }));
     }
+
+    // Whole repo, or only the changed files and the folders that lead to them; the pick is remembered in this browser
+    var views = [].slice.call(document.querySelectorAll("#mapview button"));
+    function showView(view) {
+      map.classList.toggle("changed", view === "changed");
+      views.forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.view === view)); });
+    }
+    views.forEach(function (b) {
+      b.addEventListener("click", function () {
+        showView(b.dataset.view);
+        if (params.has("embed")) return;
+        try { localStorage.setItem("glance-map-view", b.dataset.view); } catch (e) {}
+      });
+    });
+    var savedView = null;
+    try { savedView = localStorage.getItem("glance-map-view"); } catch (e) {}
+    showView(savedView === "changed" ? "changed" : "all");
 
     // Call graph: only paths that lead to touched files, from their common parent
     var GAP = 34, ROW = 36;
