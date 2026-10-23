@@ -1,0 +1,6 @@
+# Review pages stay out of search through their noindex header, not here:
+# blocking them would also stop link previews from loading.
+User-agent: *
+Allow: /
+
+Sitemap: https://glance.nishilfaldu.site/sitemap.xml
